@@ -31,7 +31,7 @@ use std::{
 use tokio::runtime::Runtime;
 
 use crate::config::McpServerConfig;
-use crate::services::tree_sitter::{TreeSitterService, initialize_service};
+use crate::services::tree_sitter::initialize_service;
 use crate::task::{TaskRegistry, TaskManager};
 use crate::task::tree_sitter_task::TreeSitterTaskHandler;
 use crate::ui::app::{App, MainViewType};

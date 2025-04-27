@@ -1,11 +1,11 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections::VecDeque;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::mcp::client::OpenRouterClient;
-use crate::services::tree_sitter::{SupportedLanguage, Symbol, SymbolKind, TreeSitterService};
+use crate::services::tree_sitter::TreeSitterService;
 use crate::ui::input::{InputCommand, InputHandler, InputMode};
 use crate::ui::output::OutputManager;
 

@@ -1,9 +1,7 @@
-use dotenv::dotenv;
 use std::io::{self, Write};
 
 use crate::config::McpServerConfig;
 use crate::mcp::client::OpenRouterClient;
-use tokio::runtime::Runtime;
 
 /// A simple CLI client for testing OpenRouter connection
 pub async fn run_simple_client() -> Result<(), Box<dyn std::error::Error>> {

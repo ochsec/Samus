@@ -3,7 +3,7 @@ pub mod mock_vscode;
 
 // Alias for providing vscode-like functionality
 pub mod vscode {
-    pub use super::mock_vscode::*;
+    
 }
 
 use anyhow::Context;

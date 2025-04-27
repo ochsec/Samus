@@ -7,7 +7,6 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command as AsyncCommand;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
-use uuid::Uuid;
 
 #[cfg(target_family = "unix")]
 use std::env::var_os;

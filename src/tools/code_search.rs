@@ -1,6 +1,6 @@
 use crate::error::TaskError;
 use crate::services::tree_sitter::{
-    QueryCapture, QueryMatch, SupportedLanguage, TreeSitterError, TreeSitterService,
+    QueryMatch, SupportedLanguage, TreeSitterError, TreeSitterService,
 };
 use std::path::Path;
 

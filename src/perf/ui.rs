@@ -1,6 +1,5 @@
 use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 // Frame rate limiter for UI rendering
@@ -81,7 +80,7 @@ impl WidgetCache {
             // If still full, remove oldest entries
             if cache.len() >= self.max_size {
                 let mut entries: Vec<_> =
-                    cache.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                    cache.iter().map(|(k, v)| (k.clone(), v)).collect();
                 entries.sort_by_key(|(_, v)| v.created_at);
                 let to_remove = entries.len() - self.max_size + 1;
 

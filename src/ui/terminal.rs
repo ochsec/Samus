@@ -1,14 +1,8 @@
-use crossterm::{
-    cursor,
-    event::{Event, KeyCode, KeyEvent, KeyModifiers},
-    style::{Color as CrosstermColor, SetBackgroundColor, SetForegroundColor},
-    terminal::{Clear, ClearType},
-};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
+    style::{Color, Style},
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
 use std::collections::{HashMap, VecDeque};

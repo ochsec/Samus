@@ -4,7 +4,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use similar::{ChangeTag, TextDiff};
 use thiserror::Error;
 
 use crate::{

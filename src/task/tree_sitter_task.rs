@@ -1,12 +1,11 @@
 use crate::error::TaskError;
 use crate::services::tree_sitter::{SupportedLanguage, TreeSitterService};
-use crate::task::{Task, TaskContext, TaskHandler, TaskId, TaskResult};
+use crate::task::{Task, TaskContext, TaskHandler, TaskResult};
 use crate::tools::{
     parse_file, parse_code_string, search_definitions, search_components, run_custom_query,
-    CodeSearchError, TreeParserError,
 };
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::path::Path;
 use std::sync::Arc;
 

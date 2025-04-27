@@ -1,13 +1,7 @@
 use reqwest::{Client as HttpClient, header};
 use serde_json::json;
-use std::sync::Arc;
-use tokio::sync::{RwLock, mpsc};
-use uuid::Uuid;
 
-use super::protocol::{
-    McpMessage, McpRequest, McpResponse, MessageType, ProtocolError, ServerState, ServerStatus,
-    Version,
-};
+use super::protocol::Version;
 use crate::config::McpServerConfig;
 use crate::error::TaskError;
 

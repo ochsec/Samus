@@ -1,10 +1,9 @@
 use ratatui::{
     prelude::*,
-    text::{Line, Span, Text},
+    text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 use similar::{ChangeTag, TextDiff};
-use std::cmp::min;
 use std::fmt;
 
 /// Our own Change struct that wraps similar::Change functionality

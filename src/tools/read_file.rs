@@ -5,7 +5,6 @@ use std::{
 };
 
 use crate::error::TaskError;
-use metrics::counter;
 
 const MAX_READ_FILE_LINES: usize = 10000;
 const BINARY_CHECK_SIZE: usize = 8000;

@@ -10,7 +10,4 @@ pub mod tasks;
 pub mod terminal;
 pub mod tui;
 
-pub use app::App;
-pub use logo::{render_logo, render_pixel_logo};
 pub use output::OutputManager;
-pub use tui::render_ui;

@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Widget, Wrap},
+    widgets::{Block, Borders, List, ListItem, Paragraph},
 };
 use std::sync::Arc;
 use tokio::sync::Mutex;

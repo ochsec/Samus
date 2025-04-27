@@ -1,14 +1,10 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use uuid::Uuid;
 
-use crate::error::TaskError;
 use crate::fs::FileSystemOperations;
 use crate::mcp::protocol::ServerState;
 use crate::mcp::task_executor::TaskExecutor;
-use crate::task::Task;
 
 /// Configuration for an MCP server
 #[derive(Debug, Clone)]

@@ -8,9 +8,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 // Re-export main types for easier access
-pub use benchmark::{BenchmarkRunner, BenchmarkStats, OptimizationProfile, PerformanceMetrics};
-pub use cpu::{Priority, Task, TaskScheduler};
-pub use ui::{DirtyRegionTracker, FrameLimiter, WidgetCache};
 
 // Memory tracking
 pub struct MemoryStats {

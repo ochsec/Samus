@@ -1,5 +1,3 @@
-use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Mutex};
 use crossterm::{
     cursor,
     event::{Event, KeyCode, KeyEvent, KeyModifiers},
@@ -7,12 +5,14 @@ use crossterm::{
     terminal::{Clear, ClearType},
 };
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
-    Frame,
 };
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 use crate::shell::terminal::{Terminal, TerminalInstance};
@@ -71,20 +71,19 @@ impl TerminalView {
         }
 
         // Generate suggestions based on command history and current input
-        self.suggestions = self.history
+        self.suggestions = self
+            .history
             .iter()
             .filter(|cmd| cmd.starts_with(&self.command_buffer))
             .cloned()
             .collect();
 
         // Add common command suggestions
-        let common_commands = vec![
-            "cd", "ls", "git", "cargo",
-            "vim", "cat", "grep", "find",
-        ];
+        let common_commands = vec!["cd", "ls", "git", "cargo", "vim", "cat", "grep", "find"];
 
         for cmd in common_commands {
-            if cmd.starts_with(&self.command_buffer) && !self.suggestions.contains(&cmd.to_string()) {
+            if cmd.starts_with(&self.command_buffer) && !self.suggestions.contains(&cmd.to_string())
+            {
                 self.suggestions.push(cmd.to_string());
             }
         }
@@ -226,7 +225,7 @@ impl TerminalViewManager {
 
     pub fn draw(&self, f: &mut Frame) {
         let chunks = self.get_layout_chunks(f.area());
-        
+
         for (i, view) in self.views.iter().enumerate() {
             if i >= chunks.len() {
                 break;
@@ -239,43 +238,28 @@ impl TerminalViewManager {
 
     fn get_layout_chunks(&self, area: Rect) -> Vec<Rect> {
         match self.layout {
-            TerminalLayout::Single => {
-                Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([Constraint::Percentage(100)].as_ref())
-                    .split(area)
-                    .to_vec()
-            }
+            TerminalLayout::Single => Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(100)].as_ref())
+                .split(area)
+                .to_vec(),
 
-            TerminalLayout::HorizontalSplit => {
-                Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints([
-                        Constraint::Percentage(50),
-                        Constraint::Percentage(50),
-                    ].as_ref())
-                    .split(area)
-                    .to_vec()
-            }
+            TerminalLayout::HorizontalSplit => Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+                .split(area)
+                .to_vec(),
 
-            TerminalLayout::VerticalSplit => {
-                Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([
-                        Constraint::Percentage(50),
-                        Constraint::Percentage(50),
-                    ].as_ref())
-                    .split(area)
-                    .to_vec()
-            }
+            TerminalLayout::VerticalSplit => Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+                .split(area)
+                .to_vec(),
 
             TerminalLayout::Grid => {
                 let horizontal = Layout::default()
                     .direction(Direction::Horizontal)
-                    .constraints([
-                        Constraint::Percentage(50),
-                        Constraint::Percentage(50),
-                    ].as_ref())
+                    .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
                     .split(area)
                     .to_vec();
 
@@ -284,12 +268,11 @@ impl TerminalViewManager {
                     chunks.extend(
                         Layout::default()
                             .direction(Direction::Vertical)
-                            .constraints([
-                                Constraint::Percentage(50),
-                                Constraint::Percentage(50),
-                            ].as_ref())
+                            .constraints(
+                                [Constraint::Percentage(50), Constraint::Percentage(50)].as_ref(),
+                            )
                             .split(chunk)
-                            .to_vec()
+                            .to_vec(),
                     );
                 }
                 chunks
@@ -316,10 +299,7 @@ impl TerminalViewManager {
         // Split inner area into output and input areas
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Min(1),
-                Constraint::Length(1),
-            ].as_ref())
+            .constraints([Constraint::Min(1), Constraint::Length(1)].as_ref())
             .split(inner_area);
 
         // Draw suggestions if any
@@ -338,8 +318,8 @@ impl TerminalViewManager {
                 })
                 .collect();
 
-            let suggestions_list = List::new(suggestion_items)
-                .block(Block::default().borders(Borders::ALL));
+            let suggestions_list =
+                List::new(suggestion_items).block(Block::default().borders(Borders::ALL));
 
             let suggestion_area = Rect {
                 height: (view.suggestions.len() as u16).min(5),
@@ -351,8 +331,8 @@ impl TerminalViewManager {
         }
 
         // Draw command input
-        let input = Paragraph::new(view.command_buffer.as_str())
-            .style(Style::default().fg(Color::White));
+        let input =
+            Paragraph::new(view.command_buffer.as_str()).style(Style::default().fg(Color::White));
         f.render_widget(input, chunks[1]);
 
         // Draw cursor if active

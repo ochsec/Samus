@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Block, Borders, List, ListItem, Paragraph, Widget, Wrap},
-    Frame,
 };
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -146,8 +146,22 @@ impl SearchView {
 
         // Render search options
         let options = vec![
-            format!("[C]ase-sensitive: {}", if state.options.case_sensitive { "On" } else { "Off" }),
-            format!("[R]egex: {}", if state.options.regex_mode { "On" } else { "Off" }),
+            format!(
+                "[C]ase-sensitive: {}",
+                if state.options.case_sensitive {
+                    "On"
+                } else {
+                    "Off"
+                }
+            ),
+            format!(
+                "[R]egex: {}",
+                if state.options.regex_mode {
+                    "On"
+                } else {
+                    "Off"
+                }
+            ),
             format!("Results: {}", state.results.len()),
         ];
         let options = Paragraph::new(Text::from(options.join(" | ")))
@@ -236,7 +250,7 @@ mod tests {
     #[tokio::test]
     async fn test_search_history() {
         let view = SearchView::new();
-        
+
         // Add some searches
         view.set_query("first".to_string()).await;
         view.set_query("second".to_string()).await;
@@ -253,7 +267,7 @@ mod tests {
     async fn test_result_navigation() {
         let view = SearchView::new();
         let mut state = view.state.lock().await;
-        
+
         // Add some mock results
         state.results = vec![
             SearchMatch {
@@ -278,10 +292,10 @@ mod tests {
         // Test navigation
         view.select_next_result().await;
         assert_eq!(view.state.lock().await.selected_result, Some(0));
-        
+
         view.select_next_result().await;
         assert_eq!(view.state.lock().await.selected_result, Some(1));
-        
+
         view.select_previous_result().await;
         assert_eq!(view.state.lock().await.selected_result, Some(0));
     }

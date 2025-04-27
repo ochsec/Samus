@@ -1,9 +1,9 @@
-use std::sync::Arc;
-use std::collections::VecDeque;
 use dashmap::DashMap;
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use regex::Regex;
+use std::collections::VecDeque;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Maximum number of queries to keep in history
@@ -48,7 +48,9 @@ impl SearchResult {
     /// Navigate to the previous match in the results
     pub fn previous_match(&mut self) {
         if !self.matches.is_empty() {
-            self.current_match = self.current_match.checked_sub(1)
+            self.current_match = self
+                .current_match
+                .checked_sub(1)
                 .unwrap_or(self.matches.len() - 1);
         }
     }
@@ -106,21 +108,21 @@ impl RegexSearch {
 
     fn create_regex(&self, query: &str, options: &SearchOptions) -> Result<Regex, regex::Error> {
         let mut pattern = String::new();
-        
+
         if !options.case_sensitive {
             pattern.push_str("(?i)");
         }
-        
+
         if options.whole_word {
             pattern.push_str("\\b");
         }
-        
+
         pattern.push_str(query);
-        
+
         if options.whole_word {
             pattern.push_str("\\b");
         }
-        
+
         Regex::new(&pattern)
     }
 }
@@ -397,18 +399,22 @@ mod tests {
         let text = "Hello World\nTest Line\nHello Test";
 
         // Test regex search
-        manager.set_options(SearchOptions {
-            regex_mode: true,
-            ..Default::default()
-        }).await;
+        manager
+            .set_options(SearchOptions {
+                regex_mode: true,
+                ..Default::default()
+            })
+            .await;
         let results = manager.search(text, "Hello").await;
         assert_eq!(results.matches.len(), 2);
 
         // Test fuzzy search
-        manager.set_options(SearchOptions {
-            regex_mode: false,
-            ..Default::default()
-        }).await;
+        manager
+            .set_options(SearchOptions {
+                regex_mode: false,
+                ..Default::default()
+            })
+            .await;
         let results = manager.search(text, "Helo").await;
         assert!(!results.matches.is_empty());
     }
@@ -421,7 +427,7 @@ mod tests {
         // Add some searches to history
         manager.search(text, "Hello").await;
         manager.search(text, "World").await;
-        
+
         let history = manager.get_history().await;
         assert_eq!(history.len(), 2);
         assert_eq!(history[0], "World");

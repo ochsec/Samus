@@ -12,7 +12,11 @@ pub struct Version {
 
 impl Version {
     pub fn new(major: u16, minor: u16, patch: u16) -> Self {
-        Self { major, minor, patch }
+        Self {
+            major,
+            minor,
+            patch,
+        }
     }
 
     pub fn is_compatible_with(&self, other: &Version) -> bool {
@@ -60,7 +64,11 @@ impl fmt::Display for ProtocolError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::VersionMismatch { client, server } => {
-                write!(f, "Protocol version mismatch - client: {:?}, server: {:?}", client, server)
+                write!(
+                    f,
+                    "Protocol version mismatch - client: {:?}, server: {:?}",
+                    client, server
+                )
             }
             Self::InvalidMessage(msg) => write!(f, "Invalid message: {}", msg),
             Self::InvalidCommand(cmd) => write!(f, "Invalid command: {}", cmd),
@@ -130,7 +138,11 @@ impl McpRequest {
         }
     }
 
-    pub fn with_arg<T: Serialize>(mut self, key: &str, value: T) -> Result<Self, serde_json::Error> {
+    pub fn with_arg<T: Serialize>(
+        mut self,
+        key: &str,
+        value: T,
+    ) -> Result<Self, serde_json::Error> {
         let json_value = serde_json::to_value(value)?;
         self.args.insert(key.to_string(), json_value);
         Ok(self)
@@ -206,7 +218,10 @@ mod tests {
         let deserialized: McpMessage = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(message.id, deserialized.id);
-        assert!(matches!(deserialized.message_type, MessageType::CommandRequest));
+        assert!(matches!(
+            deserialized.message_type,
+            MessageType::CommandRequest
+        ));
     }
 
     #[test]
@@ -224,14 +239,12 @@ mod tests {
         let state = ServerState {
             id: "test_server".to_string(),
             status: ServerStatus::Ready,
-            tools: vec![
-                ToolDefinition {
-                    name: "test_tool".to_string(),
-                    description: "A test tool".to_string(),
-                    version: Version::new(1, 0, 0),
-                    schema: serde_json::json!({}),
-                }
-            ],
+            tools: vec![ToolDefinition {
+                name: "test_tool".to_string(),
+                description: "A test tool".to_string(),
+                version: Version::new(1, 0, 0),
+                schema: serde_json::json!({}),
+            }],
             version: Version::new(1, 0, 0),
         };
 

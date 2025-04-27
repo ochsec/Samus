@@ -1,11 +1,11 @@
-use std::fmt;
-use std::cmp::min;
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, Paragraph, Wrap},
     text::{Line, Span, Text},
+    widgets::{Block, Borders, Paragraph, Wrap},
 };
 use similar::{ChangeTag, TextDiff};
+use std::cmp::min;
+use std::fmt;
 
 /// Our own Change struct that wraps similar::Change functionality
 #[derive(Debug, Clone)]
@@ -18,7 +18,7 @@ impl OurChange {
     pub fn tag(&self) -> ChangeTag {
         self.tag
     }
-    
+
     pub fn value(&self) -> &str {
         &self.value
     }
@@ -74,7 +74,7 @@ impl DiffVisualization {
                 value: change.value().to_string(),
             })
             .collect();
-        
+
         Self {
             old_content,
             new_content,
@@ -101,17 +101,19 @@ impl DiffVisualization {
 
     /// Render inline diff view
     fn render_inline(&self, area: Rect, buf: &mut Buffer) {
-        let lines: Vec<Line> = self.diff.iter()
-            .filter_map(|change| {
-                match change.tag() {
-                    ChangeTag::Delete => Some(Line::from(vec![
-                        Span::styled(format!("- {}", change.value()), Style::default().fg(Color::Red))
-                    ])),
-                    ChangeTag::Insert => Some(Line::from(vec![
-                        Span::styled(format!("+ {}", change.value()), Style::default().fg(Color::Green))
-                    ])),
-                    ChangeTag::Equal => Some(Line::from(change.value())),
-                }
+        let lines: Vec<Line> = self
+            .diff
+            .iter()
+            .filter_map(|change| match change.tag() {
+                ChangeTag::Delete => Some(Line::from(vec![Span::styled(
+                    format!("- {}", change.value()),
+                    Style::default().fg(Color::Red),
+                )])),
+                ChangeTag::Insert => Some(Line::from(vec![Span::styled(
+                    format!("+ {}", change.value()),
+                    Style::default().fg(Color::Green),
+                )])),
+                ChangeTag::Equal => Some(Line::from(change.value())),
             })
             .collect();
 
@@ -138,27 +140,29 @@ impl DiffVisualization {
             height: area.height,
         };
 
-        let old_lines: Vec<Line> = self.diff.iter()
-            .filter_map(|change| {
-                match change.tag() {
-                    ChangeTag::Delete => Some(Line::from(vec![
-                        Span::styled(format!("- {}", change.value()), Style::default().fg(Color::Red))
-                    ])),
-                    ChangeTag::Equal => Some(Line::from(change.value())),
-                    _ => None,
-                }
+        let old_lines: Vec<Line> = self
+            .diff
+            .iter()
+            .filter_map(|change| match change.tag() {
+                ChangeTag::Delete => Some(Line::from(vec![Span::styled(
+                    format!("- {}", change.value()),
+                    Style::default().fg(Color::Red),
+                )])),
+                ChangeTag::Equal => Some(Line::from(change.value())),
+                _ => None,
             })
             .collect();
 
-        let new_lines: Vec<Line> = self.diff.iter()
-            .filter_map(|change| {
-                match change.tag() {
-                    ChangeTag::Insert => Some(Line::from(vec![
-                        Span::styled(format!("+ {}", change.value()), Style::default().fg(Color::Green))
-                    ])),
-                    ChangeTag::Equal => Some(Line::from(change.value())),
-                    _ => None,
-                }
+        let new_lines: Vec<Line> = self
+            .diff
+            .iter()
+            .filter_map(|change| match change.tag() {
+                ChangeTag::Insert => Some(Line::from(vec![Span::styled(
+                    format!("+ {}", change.value()),
+                    Style::default().fg(Color::Green),
+                )])),
+                ChangeTag::Equal => Some(Line::from(change.value())),
+                _ => None,
             })
             .collect();
 
@@ -173,26 +177,20 @@ impl DiffVisualization {
 
     /// Render unified diff view
     fn render_unified(&self, area: Rect, buf: &mut Buffer) {
-        let lines: Vec<Line> = self.diff.iter()
+        let lines: Vec<Line> = self
+            .diff
+            .iter()
             .enumerate()
-            .filter_map(|(i, change)| {
-                match change.tag() {
-                    ChangeTag::Delete => Some(Line::from(vec![
-                        Span::styled(
-                            format!("-{}: {}", i, change.value()), 
-                            Style::default().fg(Color::Red)
-                        )
-                    ])),
-                    ChangeTag::Insert => Some(Line::from(vec![
-                        Span::styled(
-                            format!("+{}: {}", i, change.value()), 
-                            Style::default().fg(Color::Green)
-                        )
-                    ])),
-                    ChangeTag::Equal => Some(Line::from(
-                        format!(" {}: {}", i, change.value())
-                    )),
-                }
+            .filter_map(|(i, change)| match change.tag() {
+                ChangeTag::Delete => Some(Line::from(vec![Span::styled(
+                    format!("-{}: {}", i, change.value()),
+                    Style::default().fg(Color::Red),
+                )])),
+                ChangeTag::Insert => Some(Line::from(vec![Span::styled(
+                    format!("+{}: {}", i, change.value()),
+                    Style::default().fg(Color::Green),
+                )])),
+                ChangeTag::Equal => Some(Line::from(format!(" {}: {}", i, change.value()))),
             })
             .collect();
 
@@ -235,15 +233,12 @@ impl std::error::Error for DiffError {}
 
 /// Public API for creating and managing diffs
 pub fn create_diff(
-    old_content: &str, 
-    new_content: &str, 
-    config: Option<DiffConfig>
+    old_content: &str,
+    new_content: &str,
+    config: Option<DiffConfig>,
 ) -> Result<DiffVisualization, DiffError> {
-    let diff = DiffVisualization::new(
-        old_content.to_string(), 
-        new_content.to_string()
-    );
-    
+    let diff = DiffVisualization::new(old_content.to_string(), new_content.to_string());
+
     Ok(match config {
         Some(cfg) => diff.with_config(cfg),
         None => diff,

@@ -38,29 +38,29 @@ pub enum InputCommand {
     // Navigation commands
     SelectNextTask,
     SelectPreviousTask,
-    
+
     // Task management
     ExecuteTask,
     CancelTask,
-    
+
     // Mode and UI commands
     ChangeMode(InputMode),
     ShowHelp,
     Quit,
-    
+
     // Diff-related commands
     DiffScrollUp,
     DiffScrollDown,
     DiffToggleFold,
     ShowDiff,
-    
+
     // Search-related commands
     ToggleSearch,
     NavigateNextResult,
     NavigatePreviousResult,
     ToggleSearchCase,
     ToggleSearchRegex,
-    
+
     // Error and utility commands
     Invalid(String),
     None,
@@ -76,7 +76,7 @@ impl InputHandler {
             current_mode: InputMode::Normal,
             key_bindings: HashMap::new(),
         };
-        
+
         // Default key bindings
         handler.register_default_key_bindings();
         handler
@@ -84,24 +84,64 @@ impl InputHandler {
 
     fn register_default_key_bindings(&mut self) {
         // Navigation bindings
-        self.bind_key(KeyCode::Down, KeyModifiers::NONE, InputCommand::SelectNextTask);
-        self.bind_key(KeyCode::Up, KeyModifiers::NONE, InputCommand::SelectPreviousTask);
-        
+        self.bind_key(
+            KeyCode::Down,
+            KeyModifiers::NONE,
+            InputCommand::SelectNextTask,
+        );
+        self.bind_key(
+            KeyCode::Up,
+            KeyModifiers::NONE,
+            InputCommand::SelectPreviousTask,
+        );
+
         // Mode and control bindings
-        self.bind_key(KeyCode::Char('q'), KeyModifiers::CONTROL, InputCommand::Quit);
-        self.bind_key(KeyCode::Char('h'), KeyModifiers::CONTROL, InputCommand::ShowHelp);
-        
+        self.bind_key(
+            KeyCode::Char('q'),
+            KeyModifiers::CONTROL,
+            InputCommand::Quit,
+        );
+        self.bind_key(
+            KeyCode::Char('h'),
+            KeyModifiers::CONTROL,
+            InputCommand::ShowHelp,
+        );
+
         // Task management
-        self.bind_key(KeyCode::Char('e'), KeyModifiers::CONTROL, InputCommand::ExecuteTask);
-        self.bind_key(KeyCode::Char('c'), KeyModifiers::CONTROL, InputCommand::CancelTask);
-        
+        self.bind_key(
+            KeyCode::Char('e'),
+            KeyModifiers::CONTROL,
+            InputCommand::ExecuteTask,
+        );
+        self.bind_key(
+            KeyCode::Char('c'),
+            KeyModifiers::CONTROL,
+            InputCommand::CancelTask,
+        );
+
         // Diff controls
-        self.bind_key(KeyCode::Char('d'), KeyModifiers::CONTROL, InputCommand::ShowDiff);
-        self.bind_key(KeyCode::Char('k'), KeyModifiers::CONTROL, InputCommand::DiffScrollUp);
-        self.bind_key(KeyCode::Char('j'), KeyModifiers::CONTROL, InputCommand::DiffScrollDown);
-        
+        self.bind_key(
+            KeyCode::Char('d'),
+            KeyModifiers::CONTROL,
+            InputCommand::ShowDiff,
+        );
+        self.bind_key(
+            KeyCode::Char('k'),
+            KeyModifiers::CONTROL,
+            InputCommand::DiffScrollUp,
+        );
+        self.bind_key(
+            KeyCode::Char('j'),
+            KeyModifiers::CONTROL,
+            InputCommand::DiffScrollDown,
+        );
+
         // Search controls
-        self.bind_key(KeyCode::Char('s'), KeyModifiers::CONTROL, InputCommand::ToggleSearch);
+        self.bind_key(
+            KeyCode::Char('s'),
+            KeyModifiers::CONTROL,
+            InputCommand::ToggleSearch,
+        );
     }
 
     /// Bind a key to a specific command
@@ -266,23 +306,17 @@ mod tests {
     #[test]
     fn test_command_processing() {
         let mut handler = InputHandler::new();
-        
+
         // Type "help" command
         for c in "help".chars() {
-            let cmd = handler.handle_key_event(KeyEvent::new(
-                KeyCode::Char(c),
-                KeyModifiers::NONE,
-            ));
+            let cmd = handler.handle_key_event(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
             assert_eq!(cmd, InputCommand::None);
         }
-        
+
         // Press enter
-        let cmd = handler.handle_key_event(KeyEvent::new(
-            KeyCode::Enter,
-            KeyModifiers::NONE,
-        ));
+        let cmd = handler.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert_eq!(cmd, InputCommand::ShowHelp);
-        
+
         // Check history
         assert_eq!(handler.command_history.len(), 1);
         assert_eq!(handler.command_history[0], "help");
@@ -291,74 +325,50 @@ mod tests {
     #[test]
     fn test_history_navigation() {
         let mut handler = InputHandler::new();
-        
+
         // Add commands to history
         for cmd in &["first", "second", "third"] {
             for c in cmd.chars() {
-                handler.handle_key_event(KeyEvent::new(
-                    KeyCode::Char(c),
-                    KeyModifiers::NONE,
-                ));
+                handler.handle_key_event(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
             }
-            handler.handle_key_event(KeyEvent::new(
-                KeyCode::Enter,
-                KeyModifiers::NONE,
-            ));
+            handler.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         }
-        
+
         // Navigate backward
-        handler.handle_key_event(KeyEvent::new(
-            KeyCode::Up,
-            KeyModifiers::CONTROL,
-        ));
+        handler.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::CONTROL));
         assert_eq!(handler.command_buffer, "third");
-        
-        handler.handle_key_event(KeyEvent::new(
-            KeyCode::Up,
-            KeyModifiers::CONTROL,
-        ));
+
+        handler.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::CONTROL));
         assert_eq!(handler.command_buffer, "second");
-        
+
         // Navigate forward
-        handler.handle_key_event(KeyEvent::new(
-            KeyCode::Down,
-            KeyModifiers::CONTROL,
-        ));
+        handler.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::CONTROL));
         assert_eq!(handler.command_buffer, "third");
     }
 
     #[test]
     fn test_keyboard_shortcuts() {
         let mut handler = InputHandler::new();
-        
-        let cmd = handler.handle_key_event(KeyEvent::new(
-            KeyCode::Char('e'),
-            KeyModifiers::CONTROL,
-        ));
+
+        let cmd =
+            handler.handle_key_event(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL));
         assert_eq!(cmd, InputCommand::ExecuteTask);
-        
-        let cmd = handler.handle_key_event(KeyEvent::new(
-            KeyCode::Char('c'),
-            KeyModifiers::CONTROL,
-        ));
+
+        let cmd =
+            handler.handle_key_event(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
         assert_eq!(cmd, InputCommand::CancelTask);
-        
-        let cmd = handler.handle_key_event(KeyEvent::new(
-            KeyCode::Char('q'),
-            KeyModifiers::CONTROL,
-        ));
+
+        let cmd =
+            handler.handle_key_event(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL));
         assert_eq!(cmd, InputCommand::Quit);
     }
 
     #[test]
     fn test_mode_transitions() {
         let mut handler = InputHandler::new();
-        
+
         // Enter command mode
-        let cmd = handler.handle_key_event(KeyEvent::new(
-            KeyCode::Char(':'),
-            KeyModifiers::NONE,
-        ));
+        let cmd = handler.handle_key_event(KeyEvent::new(KeyCode::Char(':'), KeyModifiers::NONE));
         assert_eq!(cmd, InputCommand::ChangeMode(InputMode::Command));
         assert_eq!(*handler.get_current_mode(), InputMode::Command);
     }

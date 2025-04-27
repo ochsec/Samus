@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use parking_lot::RwLock;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 // Frame rate limiter for UI rendering
@@ -23,7 +23,7 @@ impl FrameLimiter {
         let mut last_frame = self.last_frame.write();
         let now = Instant::now();
         let elapsed = now.duration_since(*last_frame);
-        
+
         if elapsed >= self.frame_duration {
             *last_frame = now;
             true
@@ -72,38 +72,41 @@ impl WidgetCache {
 
     pub fn set(&self, key: WidgetCacheKey, content: Vec<u8>, ttl: Duration) {
         let mut cache = self.cache.write();
-        
+
         // Clean up expired entries if cache is full
         if cache.len() >= self.max_size {
             let _now = Instant::now();
             cache.retain(|_, widget| widget.created_at.elapsed() < widget.ttl);
-            
+
             // If still full, remove oldest entries
             if cache.len() >= self.max_size {
-                let mut entries: Vec<_> = cache.iter()
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect();
+                let mut entries: Vec<_> =
+                    cache.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
                 entries.sort_by_key(|(_, v)| v.created_at);
                 let to_remove = entries.len() - self.max_size + 1;
-                
+
                 // Collect keys first, then remove
-                let keys_to_remove: Vec<_> = entries.iter()
+                let keys_to_remove: Vec<_> = entries
+                    .iter()
                     .take(to_remove)
                     .map(|(k, _)| k)
                     .cloned()
                     .collect();
-                
+
                 for key in keys_to_remove {
                     cache.remove(&key);
                 }
             }
         }
-        
-        cache.insert(key, CachedWidget {
-            content,
-            created_at: Instant::now(),
-            ttl,
-        });
+
+        cache.insert(
+            key,
+            CachedWidget {
+                content,
+                created_at: Instant::now(),
+                ttl,
+            },
+        );
     }
 }
 
@@ -160,20 +163,20 @@ mod tests {
             widget_id: "widget2".to_string(),
             data_hash: 456,
         };
-        
+
         cache.set(key1.clone(), vec![1, 2, 3], Duration::from_secs(1));
         cache.set(key2.clone(), vec![4, 5, 6], Duration::from_secs(1));
-        
+
         assert_eq!(cache.get(&key1), Some(vec![1, 2, 3]));
         assert_eq!(cache.get(&key2), Some(vec![4, 5, 6]));
-        
+
         // Test max size enforcement
         let key3 = WidgetCacheKey {
             widget_id: "widget3".to_string(),
             data_hash: 789,
         };
         cache.set(key3.clone(), vec![7, 8, 9], Duration::from_secs(1));
-        
+
         // Oldest entry should be evicted
         assert_eq!(cache.get(&key1), None);
         assert_eq!(cache.get(&key2), Some(vec![4, 5, 6]));
@@ -185,12 +188,12 @@ mod tests {
         let tracker = DirtyRegionTracker::new();
         tracker.mark_dirty(0, 0, 10, 10);
         tracker.mark_dirty(20, 20, 5, 5);
-        
+
         let regions = tracker.get_dirty_regions();
         assert_eq!(regions.len(), 2);
         assert_eq!(regions[0], (0, 0, 10, 10));
         assert_eq!(regions[1], (20, 20, 5, 5));
-        
+
         tracker.clear();
         assert!(tracker.get_dirty_regions().is_empty());
     }

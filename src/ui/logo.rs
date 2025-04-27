@@ -1,8 +1,9 @@
 use ratatui::{
+    Frame,
+    layout::Rect,
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame, layout::Rect,
 };
 
 /// ASCII representation of Samus title logo

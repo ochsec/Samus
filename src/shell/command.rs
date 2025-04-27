@@ -1,6 +1,5 @@
 use crate::error::TaskError;
 use crate::ui::OutputManager;
-use uuid::Uuid;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -8,6 +7,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command as AsyncCommand;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
+use uuid::Uuid;
 
 #[cfg(target_family = "unix")]
 use std::env::var_os;
@@ -30,7 +30,7 @@ fn detect_shell() -> (String, Vec<String>) {
     let shell = var_os("SHELL")
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| "/bin/sh".to_string());
-    
+
     (shell, vec!["-c".to_string()])
 }
 
@@ -100,7 +100,7 @@ impl ShellCommand {
                 full_command.push(' ');
                 full_command.push_str(arg);
             }
-            
+
             let cmd = Command::new(shell);
             let mut args = shell_args;
             args.push(full_command);
@@ -122,9 +122,9 @@ impl ShellCommand {
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
 
-        let output = cmd.output().map_err(|e| {
-            TaskError::ExecutionFailed(format!("Failed to execute command: {}", e))
-        })?;
+        let output = cmd
+            .output()
+            .map_err(|e| TaskError::ExecutionFailed(format!("Failed to execute command: {}", e)))?;
 
         let result = ShellCommandResult {
             exit_code: output.status.code(),
@@ -149,7 +149,7 @@ impl ShellCommand {
                 full_command.push(' ');
                 full_command.push_str(arg);
             }
-            
+
             let mut args = shell_args;
             args.push(full_command);
             (shell, args)
@@ -171,17 +171,19 @@ impl ShellCommand {
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
 
-        let mut child = cmd.spawn().map_err(|e| {
-            TaskError::ExecutionFailed(format!("Failed to execute command: {}", e))
-        })?;
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| TaskError::ExecutionFailed(format!("Failed to execute command: {}", e)))?;
 
-        let stdout = child.stdout.take().ok_or_else(|| {
-            TaskError::ExecutionFailed("Failed to capture stdout".to_string())
-        })?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| TaskError::ExecutionFailed("Failed to capture stdout".to_string()))?;
 
-        let stderr = child.stderr.take().ok_or_else(|| {
-            TaskError::ExecutionFailed("Failed to capture stderr".to_string())
-        })?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| TaskError::ExecutionFailed("Failed to capture stderr".to_string()))?;
 
         let (tx, rx) = mpsc::channel(100);
         let tx_clone = tx.clone();
@@ -201,7 +203,9 @@ impl ShellCommand {
                 while let Ok(Some(line)) = reader.next_line().await {
                     let _ = tx.send(line.clone()).await;
                     if let Some(ref sender) = sender {
-                        let _ = sender.send(format!("[stdout:{}] {}", buffer_id, line)).await;
+                        let _ = sender
+                            .send(format!("[stdout:{}] {}", buffer_id, line))
+                            .await;
                     }
                 }
             });
@@ -222,7 +226,9 @@ impl ShellCommand {
                 while let Ok(Some(line)) = reader.next_line().await {
                     let _ = tx_clone.send(line.clone()).await;
                     if let Some(ref sender) = sender {
-                        let _ = sender.send(format!("[stderr:{}] {}", buffer_id, line)).await;
+                        let _ = sender
+                            .send(format!("[stderr:{}] {}", buffer_id, line))
+                            .await;
                     }
                 }
             });
@@ -237,19 +243,20 @@ impl ShellCommand {
 
         // Wait for the command to complete with timeout
         let status = match timeout(Duration::from_secs(self.timeout_secs), child.wait()).await {
-            Ok(result) => {
-                result.map_err(|e| {
-                    TaskError::ExecutionFailed(format!("Failed to wait for command: {}", e))
-                })?
-            }
+            Ok(result) => result.map_err(|e| {
+                TaskError::ExecutionFailed(format!("Failed to wait for command: {}", e))
+            })?,
             Err(_) => {
                 let _ = child.kill().await;
-                return Ok((rx, ShellCommandResult {
-                    exit_code: None,
-                    stdout: String::new(),
-                    stderr: String::new(),
-                    timed_out: true,
-                }));
+                return Ok((
+                    rx,
+                    ShellCommandResult {
+                        exit_code: None,
+                        stdout: String::new(),
+                        stderr: String::new(),
+                        timed_out: true,
+                    },
+                ));
             }
         };
 
@@ -272,7 +279,7 @@ impl ShellCommand {
                 full_command.push(' ');
                 full_command.push_str(arg);
             }
-            
+
             shell_args.push(full_command);
             (shell, shell_args)
         } else {
@@ -293,7 +300,8 @@ impl ShellCommand {
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
 
-        cmd.spawn().map_err(|e| TaskError::ExecutionFailed(format!("Failed to spawn command: {}", e)))
+        cmd.spawn()
+            .map_err(|e| TaskError::ExecutionFailed(format!("Failed to spawn command: {}", e)))
     }
 }
 
@@ -305,11 +313,8 @@ mod tests {
 
     #[test]
     fn test_basic_command() {
-        let cmd = ShellCommand::new("echo")
-            .arg("hello")
-            .execute()
-            .unwrap();
-        
+        let cmd = ShellCommand::new("echo").arg("hello").execute().unwrap();
+
         assert_eq!(cmd.exit_code, Some(0));
         assert_eq!(cmd.stdout.trim(), "hello");
         assert!(cmd.stderr.is_empty());
@@ -322,7 +327,7 @@ mod tests {
             .arg("TEST_VAR")
             .execute()
             .unwrap();
-        
+
         assert_eq!(cmd.exit_code, Some(0));
         assert_eq!(cmd.stdout.trim(), "test_value");
     }
@@ -331,7 +336,7 @@ mod tests {
     fn test_command_timeout() {
         let rt = Runtime::new().unwrap();
         let start = Instant::now();
-        
+
         let (_, result) = rt.block_on(async {
             ShellCommand::new("sleep")
                 .arg("5")
@@ -352,7 +357,7 @@ mod tests {
             .use_shell(true)
             .execute()
             .unwrap();
-        
+
         assert_eq!(cmd.exit_code, Some(0));
         assert!(!cmd.stdout.trim().is_empty());
     }
@@ -360,7 +365,7 @@ mod tests {
     #[test]
     fn test_streaming_output() {
         let rt = Runtime::new().unwrap();
-        
+
         rt.block_on(async {
             let (mut rx, result) = ShellCommand::new("echo")
                 .args(&["line1", "line2"])
@@ -369,12 +374,12 @@ mod tests {
                 .unwrap();
 
             assert_eq!(result.exit_code, Some(0));
-            
+
             let mut output = Vec::new();
             while let Some(line) = rx.recv().await {
                 output.push(line);
             }
-            
+
             assert_eq!(output.len(), 1);
             assert_eq!(output[0], "line1 line2");
         });
@@ -383,7 +388,7 @@ mod tests {
     #[test]
     fn test_streaming_with_output_manager() {
         let rt = Runtime::new().unwrap();
-        
+
         rt.block_on(async {
             let mut output_mgr = OutputManager::new();
             let buffer_id = output_mgr.create_buffer();
@@ -418,7 +423,7 @@ mod tests {
     #[test]
     fn test_stderr_streaming() {
         let rt = Runtime::new().unwrap();
-        
+
         rt.block_on(async {
             let mut output_mgr = OutputManager::new();
             let buffer_id = output_mgr.create_buffer();

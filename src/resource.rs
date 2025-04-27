@@ -5,13 +5,13 @@ use std::sync::Arc;
 pub trait Resource: Send + Sync + 'static {
     /// Get the unique identifier for this resource.
     fn id(&self) -> &str;
-    
+
     /// Get the resource type name.
     fn resource_type(&self) -> &str;
-    
+
     /// Get a reference to the underlying resource as Any.
     fn as_any(&self) -> &dyn Any;
-    
+
     /// Get a mutable reference to the underlying resource as Any.
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }

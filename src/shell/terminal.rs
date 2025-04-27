@@ -2,14 +2,13 @@ use crate::error::TaskError;
 use crate::shell::command::{ShellCommand, ShellCommandResult};
 use crate::ui::OutputManager;
 use crossterm::{
-    cursor,
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
+    cursor, execute,
+    terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode},
 };
 use std::io::stdout;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use tokio::sync::{mpsc, Mutex as AsyncMutex};
+use tokio::sync::{Mutex as AsyncMutex, mpsc};
 use uuid::Uuid;
 
 /// Represents a terminal instance with a unique identifier
@@ -29,18 +28,18 @@ impl TerminalInstance {
 pub trait Terminal: Send + Sync {
     /// Execute a command in the terminal.
     fn execute_command(&self, command: ShellCommand) -> Result<ShellCommandResult, TaskError>;
-    
+
     /// Execute a command and stream its output.
     fn execute_streaming(
         &self,
         command: ShellCommand,
         output_mgr: Option<&OutputManager>,
-        buffer_id: Option<Uuid>
+        buffer_id: Option<Uuid>,
     ) -> Result<mpsc::Receiver<String>, TaskError>;
-    
+
     /// Get the current working directory.
     fn get_working_directory(&self) -> Result<PathBuf, TaskError>;
-    
+
     /// Set the current working directory.
     fn set_working_directory(&self, dir: PathBuf) -> Result<(), TaskError>;
 
@@ -88,9 +87,10 @@ impl Terminal for TerminalManager {
             TaskError::ExecutionFailed("Failed to acquire lock for active instance".to_string())
         })?;
 
-        let instance_id = active.as_ref().ok_or_else(|| {
-            TaskError::ExecutionFailed("No active terminal instance".to_string())
-        })?.id();
+        let instance_id = active
+            .as_ref()
+            .ok_or_else(|| TaskError::ExecutionFailed("No active terminal instance".to_string()))?
+            .id();
 
         let working_dirs = self.working_dirs.lock().map_err(|_| {
             TaskError::ExecutionFailed("Failed to acquire lock for working directories".to_string())
@@ -103,20 +103,21 @@ impl Terminal for TerminalManager {
         let command = command.working_dir(working_dir.clone());
         command.execute()
     }
-    
+
     fn execute_streaming(
         &self,
         command: ShellCommand,
         output_mgr: Option<&OutputManager>,
-        buffer_id: Option<Uuid>
+        buffer_id: Option<Uuid>,
     ) -> Result<mpsc::Receiver<String>, TaskError> {
         let active = self.active_instance.try_lock().map_err(|_| {
             TaskError::ExecutionFailed("Failed to acquire lock for active instance".to_string())
         })?;
 
-        let instance_id = active.as_ref().ok_or_else(|| {
-            TaskError::ExecutionFailed("No active terminal instance".to_string())
-        })?.id();
+        let instance_id = active
+            .as_ref()
+            .ok_or_else(|| TaskError::ExecutionFailed("No active terminal instance".to_string()))?
+            .id();
 
         let working_dirs = self.working_dirs.lock().map_err(|_| {
             TaskError::ExecutionFailed("Failed to acquire lock for working directories".to_string())
@@ -127,41 +128,43 @@ impl Terminal for TerminalManager {
         })?;
 
         let command = command.working_dir(working_dir.clone());
-        
+
         let runtime = tokio::runtime::Handle::current();
-        let (rx, _) = runtime.block_on(async {
-            command.execute_streaming(output_mgr, buffer_id).await
-        })?;
-        
+        let (rx, _) =
+            runtime.block_on(async { command.execute_streaming(output_mgr, buffer_id).await })?;
+
         Ok(rx)
     }
-    
+
     fn get_working_directory(&self) -> Result<PathBuf, TaskError> {
         let active = self.active_instance.try_lock().map_err(|_| {
             TaskError::ExecutionFailed("Failed to acquire lock for active instance".to_string())
         })?;
 
-        let instance_id = active.as_ref().ok_or_else(|| {
-            TaskError::ExecutionFailed("No active terminal instance".to_string())
-        })?.id();
+        let instance_id = active
+            .as_ref()
+            .ok_or_else(|| TaskError::ExecutionFailed("No active terminal instance".to_string()))?
+            .id();
 
         let working_dirs = self.working_dirs.lock().map_err(|_| {
             TaskError::ExecutionFailed("Failed to acquire lock for working directories".to_string())
         })?;
 
-        working_dirs.get(&instance_id)
+        working_dirs
+            .get(&instance_id)
             .cloned()
             .ok_or_else(|| TaskError::ExecutionFailed("Working directory not found".to_string()))
     }
-    
+
     fn set_working_directory(&self, dir: PathBuf) -> Result<(), TaskError> {
         let active = self.active_instance.try_lock().map_err(|_| {
             TaskError::ExecutionFailed("Failed to acquire lock for active instance".to_string())
         })?;
 
-        let instance_id = active.as_ref().ok_or_else(|| {
-            TaskError::ExecutionFailed("No active terminal instance".to_string())
-        })?.id();
+        let instance_id = active
+            .as_ref()
+            .ok_or_else(|| TaskError::ExecutionFailed("No active terminal instance".to_string()))?
+            .id();
 
         let mut working_dirs = self.working_dirs.lock().map_err(|_| {
             TaskError::ExecutionFailed("Failed to acquire lock for working directories".to_string())
@@ -186,9 +189,12 @@ impl Terminal for TerminalManager {
         })?;
 
         // Set initial working directory to current directory
-        working_dirs.insert(instance.id, std::env::current_dir().map_err(|e| {
-            TaskError::ExecutionFailed(format!("Failed to get current directory: {}", e))
-        })?);
+        working_dirs.insert(
+            instance.id,
+            std::env::current_dir().map_err(|e| {
+                TaskError::ExecutionFailed(format!("Failed to get current directory: {}", e))
+            })?,
+        );
 
         instances.push(instance.clone());
 
@@ -209,7 +215,9 @@ impl Terminal for TerminalManager {
         })?;
 
         if !instances.iter().any(|i| i.id == instance.id) {
-            return Err(TaskError::ExecutionFailed("Terminal instance not found".to_string()));
+            return Err(TaskError::ExecutionFailed(
+                "Terminal instance not found".to_string(),
+            ));
         }
 
         let mut active = self.active_instance.try_lock().map_err(|_| {
@@ -223,17 +231,11 @@ impl Terminal for TerminalManager {
     }
 
     fn clear_screen(&self) -> Result<(), TaskError> {
-        enable_raw_mode().map_err(|e| {
-            TaskError::ExecutionFailed(format!("Failed to enable raw mode: {}", e))
-        })?;
+        enable_raw_mode()
+            .map_err(|e| TaskError::ExecutionFailed(format!("Failed to enable raw mode: {}", e)))?;
 
-        execute!(
-            stdout(),
-            Clear(ClearType::All),
-            cursor::MoveTo(0, 0)
-        ).map_err(|e| {
-            TaskError::ExecutionFailed(format!("Failed to clear screen: {}", e))
-        })?;
+        execute!(stdout(), Clear(ClearType::All), cursor::MoveTo(0, 0))
+            .map_err(|e| TaskError::ExecutionFailed(format!("Failed to clear screen: {}", e)))?;
 
         disable_raw_mode().map_err(|e| {
             TaskError::ExecutionFailed(format!("Failed to disable raw mode: {}", e))
@@ -244,7 +246,7 @@ impl Terminal for TerminalManager {
 
     fn write(&self, text: &str) -> Result<(), TaskError> {
         use std::io::Write;
-        
+
         let mut stdout = stdout();
         write!(stdout, "{}", text).map_err(|e| {
             TaskError::ExecutionFailed(format!("Failed to write to terminal: {}", e))
@@ -265,10 +267,12 @@ mod tests {
     #[test]
     fn test_terminal_instance_creation() {
         let manager = TerminalManager::new();
-        let instance = manager.create_instance("Test Terminal".to_string()).unwrap();
-        
+        let instance = manager
+            .create_instance("Test Terminal".to_string())
+            .unwrap();
+
         assert_eq!(instance.title, "Test Terminal");
-        
+
         let instances = manager.get_instances().unwrap();
         assert_eq!(instances.len(), 1);
         assert_eq!(instances[0].title, "Test Terminal");
@@ -277,11 +281,13 @@ mod tests {
     #[test]
     fn test_working_directory() {
         let manager = TerminalManager::new();
-        let instance = manager.create_instance("Test Terminal".to_string()).unwrap();
-        
+        let instance = manager
+            .create_instance("Test Terminal".to_string())
+            .unwrap();
+
         let test_dir = Path::new("/tmp").to_path_buf();
         manager.set_working_directory(test_dir.clone()).unwrap();
-        
+
         let current_dir = manager.get_working_directory().unwrap();
         assert_eq!(current_dir, test_dir);
     }
@@ -291,9 +297,9 @@ mod tests {
         let manager = TerminalManager::new();
         let instance1 = manager.create_instance("Terminal 1".to_string()).unwrap();
         let instance2 = manager.create_instance("Terminal 2".to_string()).unwrap();
-        
+
         manager.switch_to(&instance2).unwrap();
-        
+
         let instances = manager.get_instances().unwrap();
         assert_eq!(instances.len(), 2);
     }
@@ -301,12 +307,14 @@ mod tests {
     #[test]
     fn test_command_execution() {
         let manager = TerminalManager::new();
-        let _instance = manager.create_instance("Test Terminal".to_string()).unwrap();
-        
-        let result = manager.execute_command(
-            ShellCommand::new("echo").arg("test")
-        ).unwrap();
-        
+        let _instance = manager
+            .create_instance("Test Terminal".to_string())
+            .unwrap();
+
+        let result = manager
+            .execute_command(ShellCommand::new("echo").arg("test"))
+            .unwrap();
+
         assert_eq!(result.exit_code, Some(0));
         assert_eq!(result.stdout.trim(), "test");
     }
@@ -315,15 +323,15 @@ mod tests {
     fn test_streaming_output() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         let manager = TerminalManager::new();
-        let _instance = manager.create_instance("Test Terminal".to_string()).unwrap();
-        
+        let _instance = manager
+            .create_instance("Test Terminal".to_string())
+            .unwrap();
+
         runtime.block_on(async {
-            let mut rx = manager.execute_streaming(
-                ShellCommand::new("echo").arg("test"),
-                None,
-                None
-            ).unwrap();
-            
+            let mut rx = manager
+                .execute_streaming(ShellCommand::new("echo").arg("test"), None, None)
+                .unwrap();
+
             let output = rx.recv().await.unwrap();
             assert_eq!(output.trim(), "test");
         });

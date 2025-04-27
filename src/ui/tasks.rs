@@ -1,11 +1,12 @@
+use crate::task::Task;
+use crate::ui::task_types::TaskOutput;
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
-    Frame,
 };
-use crate::task::{Task, TaskOutput};
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -59,10 +60,7 @@ impl TaskView {
     pub fn render(&self, frame: &mut Frame, area: Rect) {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(30),
-                Constraint::Percentage(70),
-            ])
+            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
             .split(area);
 
         self.render_task_list(frame, chunks[0]);
@@ -70,16 +68,19 @@ impl TaskView {
     }
 
     fn render_task_list(&self, frame: &mut Frame, area: Rect) {
-        let items: Vec<ListItem> = self.tasks
+        let items: Vec<ListItem> = self
+            .tasks
             .iter()
             .enumerate()
             .map(|(i, task)| {
                 let style = if Some(i) == self.selected_index {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default()
                 };
-                
+
                 ListItem::new(Line::from(vec![
                     Span::styled(format!("{}: ", task.id), style),
                     Span::styled(&task.name, style),
@@ -88,20 +89,18 @@ impl TaskView {
             .collect();
 
         let list = List::new(items)
-            .block(Block::default()
-                .title("Tasks")
-                .borders(Borders::ALL))
-            .highlight_style(Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD));
+            .block(Block::default().title("Tasks").borders(Borders::ALL))
+            .highlight_style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            );
 
         frame.render_widget(list, area);
     }
 
     fn render_task_detail(&self, frame: &mut Frame, area: Rect) {
-        let block = Block::default()
-            .title("Task Detail")
-            .borders(Borders::ALL);
+        let block = Block::default().title("Task Detail").borders(Borders::ALL);
 
         let inner_area = block.inner(area);
         frame.render_widget(block, area);
@@ -110,9 +109,9 @@ impl TaskView {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(3),  // Task info
-                    Constraint::Length(3),  // Resources
-                    Constraint::Min(0),     // Output
+                    Constraint::Length(3), // Task info
+                    Constraint::Length(3), // Resources
+                    Constraint::Min(0),    // Output
                 ])
                 .split(inner_area);
 
@@ -130,11 +129,7 @@ impl TaskView {
             frame.render_widget(info, chunks[0]);
 
             // Resources (Commented out since Task doesn't have resources field yet)
-            let resources = Paragraph::new(
-                Line::from(vec![
-                    Span::raw("No resources attached")
-                ])
-            );
+            let resources = Paragraph::new(Line::from(vec![Span::raw("No resources attached")]));
             frame.render_widget(resources, chunks[1]);
 
             // Output
@@ -148,13 +143,12 @@ impl TaskView {
                 let output_text = Paragraph::new(vec![
                     Line::from(vec![
                         Span::styled("Status: ", style),
-                        Span::styled(
-                            if output.success { "Success" } else { "Failed" },
-                            style
-                        ),
+                        Span::styled(if output.success { "Success" } else { "Failed" }, style),
                     ]),
-                    Line::from(vec![Span::raw("")]),  // Empty line
-                    Line::from(vec![Span::raw(output.message.as_deref().unwrap_or("No message"))]),
+                    Line::from(vec![Span::raw("")]), // Empty line
+                    Line::from(vec![Span::raw(
+                        output.message.as_deref().unwrap_or("No message"),
+                    )]),
                 ]);
                 frame.render_widget(output_text, chunks[2]);
             }
@@ -178,21 +172,21 @@ mod tests {
     #[test]
     fn test_task_selection() {
         let mut view = TaskView::new();
-        
+
         // Add some test tasks
         view.add_task(Task::new("task1", "Task 1"));
         view.add_task(Task::new("task2", "Task 2"));
-        
+
         // Test selection
         view.select_next();
         assert_eq!(view.selected_index, Some(0));
-        
+
         view.select_next();
         assert_eq!(view.selected_index, Some(1));
-        
+
         view.select_next();
         assert_eq!(view.selected_index, Some(0));
-        
+
         view.select_previous();
         assert_eq!(view.selected_index, Some(1));
     }
@@ -204,8 +198,11 @@ mod tests {
             success: true,
             message: Some("Test completed".to_string()),
         };
-        
+
         view.update_output(output.clone());
-        assert_eq!(view.current_output.as_ref().unwrap().message, output.message);
+        assert_eq!(
+            view.current_output.as_ref().unwrap().message,
+            output.message
+        );
     }
 }

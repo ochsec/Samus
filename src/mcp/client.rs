@@ -94,9 +94,6 @@ impl OpenRouterClient {
             TaskError::ExecutionFailed(format!("Failed to read response body: {}", e))
         })?;
 
-        // Print the raw response
-        println!("Raw response: {}", response_body);
-
         // Parse the JSON
         let response_json: serde_json::Value =
             serde_json::from_str(&response_body).map_err(|e| {

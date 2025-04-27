@@ -8,6 +8,7 @@ use crate::error::TaskError;
 use crate::fs::operations::FileSystem;
 
 pub mod tree_sitter_task;
+pub mod shell_task;
 
 /// Unique identifier for tasks
 pub type TaskId = String;

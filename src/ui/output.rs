@@ -22,6 +22,8 @@ pub struct OutputManager {
     sender: Option<mpsc::Sender<String>>,
     // For handling LLM responses
     llm_receiver: Option<std_mpsc::Receiver<Result<String, TaskError>>>,
+    // For handling shell command results
+    shell_receiver: Option<std_mpsc::Receiver<Result<crate::task::TaskResult, TaskError>>>,
 }
 
 impl OutputManager {
@@ -31,12 +33,18 @@ impl OutputManager {
             buffer: Vec::new(),
             sender: None,
             llm_receiver: None,
+            shell_receiver: None,
         }
     }
 
     /// Store the receiver for LLM responses
     pub fn store_receiver(&mut self, rx: std_mpsc::Receiver<Result<String, TaskError>>) {
         self.llm_receiver = Some(rx);
+    }
+    
+    /// Store the receiver for shell command results
+    pub fn store_shell_receiver(&mut self, rx: std_mpsc::Receiver<Result<crate::task::TaskResult, TaskError>>) {
+        self.shell_receiver = Some(rx);
     }
 
     /// Check for available LLM responses
@@ -58,6 +66,32 @@ impl OutputManager {
                     self.llm_receiver = None;
                     return Some(Err(TaskError::ExecutionFailed(
                         "LLM response channel disconnected".to_string(),
+                    )));
+                }
+            }
+        }
+        None
+    }
+    
+    /// Check for available shell command results
+    pub fn check_shell_result(&mut self) -> Option<Result<crate::task::TaskResult, TaskError>> {
+        if let Some(rx) = &self.shell_receiver {
+            // Try to receive a message without blocking
+            match rx.try_recv() {
+                Ok(result) => {
+                    // Clear the receiver once we've processed a message
+                    self.shell_receiver = None;
+                    return Some(result);
+                }
+                Err(std_mpsc::TryRecvError::Empty) => {
+                    // No message available yet, keep waiting
+                    return None;
+                }
+                Err(std_mpsc::TryRecvError::Disconnected) => {
+                    // Channel disconnected, clear the receiver
+                    self.shell_receiver = None;
+                    return Some(Err(TaskError::ExecutionFailed(
+                        "Shell command channel disconnected".to_string(),
                     )));
                 }
             }
@@ -88,6 +122,7 @@ impl OutputManager {
             buffer: Vec::new(),
             sender: Some(sender),
             llm_receiver: None,
+            shell_receiver: None,
         }
     }
 

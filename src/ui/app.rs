@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 use crate::mcp::client::OpenRouterClient;
 use crate::services::tree_sitter::TreeSitterService;
+use crate::task::TaskManagerTrait;
 use crate::ui::input::{InputCommand, InputHandler, InputMode};
 use crate::ui::output::OutputManager;
 
@@ -67,6 +68,9 @@ pub struct App {
     pub current_file_symbols: Vec<DisplaySymbol>,
     pub current_file_path: Option<String>,
 
+    // Task management
+    pub task_manager: Option<Arc<crate::task::TaskManager>>,
+
     // Application timing
     pub tick_rate: Duration,
     pub last_tick: Instant,
@@ -94,10 +98,17 @@ impl App {
             tree_sitter_service: None,
             current_file_symbols: Vec::new(),
             current_file_path: None,
+            
+            task_manager: None,
 
             tick_rate: Duration::from_millis(250),
             last_tick: Instant::now(),
         }
+    }
+    
+    /// Set the task manager
+    pub fn set_task_manager(&mut self, task_manager: Arc<crate::task::TaskManager>) {
+        self.task_manager = Some(task_manager);
     }
 
     /// Initialize TreeSitter service
@@ -248,7 +259,7 @@ impl App {
     fn process_slash_command(&mut self, command: &str) {
         let response = match command.trim() {
             "help" => {
-                "Available commands: /help, /quit, /search, /diff, /model, /outline".to_string()
+                "Available commands: /help, /quit, /search, /diff, /model, /outline, /ls, /dir".to_string()
             }
             "quit" => {
                 self.should_quit = true;
@@ -268,12 +279,72 @@ impl App {
                 self.current_main_view = MainViewType::CodeOutline;
                 self.show_code_outline(cmd)
             }
+            cmd if cmd.starts_with("ls") || cmd.starts_with("dir") => {
+                self.list_directory_command(cmd)
+            }
             _ => "Unknown command. Try /help for a list of commands.".to_string(),
         };
 
         self.add_chat_message(response, false);
     }
 
+    /// List directory contents using the shell task handler
+    fn list_directory_command(&mut self, cmd: &str) -> String {
+        // Parse path from command (format: /ls [path] or /dir [path])
+        let parts: Vec<&str> = cmd.split_whitespace().collect();
+        let path = if parts.len() >= 2 {
+            parts[1].to_string()
+        } else {
+            ".".to_string()  // Current directory by default
+        };
+        
+        // Parse recursive flag
+        let recursive = parts.len() >= 3 && parts[2].eq_ignore_ascii_case("-r");
+        
+        // Check if task manager is available
+        if let Some(task_manager) = &self.task_manager {
+            use crate::task::Task;
+            use serde_json::json;
+            
+            // Create a shell task to list the directory
+            let task = Task::new("shell", json!({
+                "type": "list_directory",
+                "path": path,
+                "recursive": recursive
+            }));
+            
+            // Mark as processing
+            self.is_processing = true;
+            
+            // Clone task manager for thread
+            let task_manager_clone = task_manager.clone();
+            let (tx, rx) = std::sync::mpsc::channel();
+            
+            // Spawn a thread to handle the async execution
+            std::thread::spawn(move || {
+                // Create a tokio runtime for async operations
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                
+                // Execute the task
+                let result = rt.block_on(async { task_manager_clone.execute_task(task).await });
+                
+                // Send result back to main thread
+                tx.send(result).unwrap();
+            });
+            
+            // Store receiver for later checking
+            self.output_manager.store_shell_receiver(rx);
+            
+            // Return intermediate message
+            format!("Listing {}directory contents for: {}", 
+                if recursive { "recursive " } else { "" }, 
+                path)
+        } else {
+            // No task manager available
+            "Error: Task manager not initialized.".to_string()
+        }
+    }
+    
     /// Show code outline for a file
     fn show_code_outline(&mut self, cmd: &str) -> String {
         // Parse file path if provided
@@ -389,7 +460,45 @@ impl App {
     fn process_bash_command(&mut self, command: &str) {
         self.current_main_view = MainViewType::ShellOutput;
         self.add_chat_message(format!("Executing bash command: {}", command), false);
-        // In a real implementation, this would execute the command
+        
+        // Check if task manager is available
+        if let Some(task_manager) = &self.task_manager {
+            use crate::task::Task;
+            use serde_json::json;
+            
+            // Create a shell task to execute the command
+            let task = Task::new("shell", json!({
+                "type": "execute",
+                "command": command,
+                "capture_stderr": true
+            }));
+            
+            // Mark as processing
+            self.is_processing = true;
+            
+            // Clone task manager for thread
+            let task_manager_clone = task_manager.clone();
+            let (tx, rx) = std::sync::mpsc::channel();
+            
+            // Spawn a thread to handle the async execution
+            std::thread::spawn(move || {
+                // Create a tokio runtime for async operations
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                
+                // Execute the task
+                let result = rt.block_on(async { task_manager_clone.execute_task(task).await });
+                
+                // Send result back to main thread
+                tx.send(result).unwrap();
+            });
+            
+            // Store receiver for later checking
+            self.output_manager.store_shell_receiver(rx);
+        } else {
+            // No task manager available
+            self.add_chat_message("Error: Task manager not initialized.".to_string(), false);
+            self.is_processing = false;
+        }
     }
 
     /// Process file references
@@ -604,9 +713,41 @@ impl App {
     pub fn on_tick(&mut self) {
         self.last_tick = Instant::now();
 
-        // Check for LLM responses
+        // Check for LLM responses and shell command results
         if self.is_processing {
             self.check_llm_response();
+            self.check_shell_result();
+        }
+    }
+    
+    /// Check for shell command results
+    fn check_shell_result(&mut self) {
+        if let Some(result) = self.output_manager.check_shell_result() {
+            match result {
+                Ok(task_result) => {
+                    // Convert task result to string based on its type
+                    let result_str = match task_result {
+                        crate::task::TaskResult::Text(text) => text,
+                        crate::task::TaskResult::Json(json) => format!("{}", json),
+                        crate::task::TaskResult::Binary(bytes) => format!("[Binary data: {} bytes]", bytes.len()),
+                    };
+                    
+                    // Add the result to chat messages and update view
+                    self.add_chat_message(result_str, false);
+                    
+                    // Switch to shell output view to make results more visible
+                    if self.current_main_view != MainViewType::ShellOutput {
+                        self.current_main_view = MainViewType::ShellOutput;
+                    }
+                }
+                Err(e) => {
+                    // Add error message
+                    self.add_chat_message(format!("Error executing command: {}", e), false);
+                }
+            }
+            
+            // Mark as no longer processing
+            self.is_processing = false;
         }
     }
 

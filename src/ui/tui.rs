@@ -122,17 +122,33 @@ fn render_main_view(f: &mut Frame, app: &App, area: Rect) {
             f.render_widget(paragraph, inner_area);
         }
         MainViewType::ShellOutput => {
-            // Placeholder for shell output rendering
-            let text = vec![
-                Line::from("$ ls -la"),
-                Line::from("total 16"),
-                Line::from("drwxr-xr-x  8 user  group  256 Apr 25 14:32 ."),
-                Line::from("drwxr-xr-x  5 user  group  160 Apr 24 10:15 .."),
-                Line::from("drwxr-xr-x 13 user  group  416 Apr 25 14:32 .git"),
-                Line::from("-rw-r--r--  1 user  group   88 Apr 24 10:15 Cargo.toml"),
-                Line::from("drwxr-xr-x  4 user  group  128 Apr 24 10:15 src"),
-            ];
-            let paragraph = Paragraph::new(text).style(Style::default().fg(Color::Gray));
+            // Get the most recent shell output from chat history
+            let empty_string = String::new();
+            let shell_output = app.chat_messages.iter()
+                .rev()
+                .find(|msg| !msg.is_user)
+                .map(|msg| &msg.content)
+                .unwrap_or(&empty_string);
+                
+            // Convert shell output to lines
+            let text: Vec<Line> = shell_output
+                .lines()
+                .map(|line| {
+                    // Special handling for directory trees
+                    if line.contains("├") || line.contains("└") || line.contains("│") {
+                        Line::from(Span::styled(line, Style::default().fg(Color::Cyan)))
+                    } else if line.starts_with("$") || line.starts_with("#") {
+                        Line::from(Span::styled(line, Style::default().fg(Color::Yellow)))
+                    } else {
+                        Line::from(line)
+                    }
+                })
+                .collect();
+                
+            let paragraph = Paragraph::new(text)
+                .style(Style::default().fg(Color::Gray))
+                .wrap(Wrap { trim: false }); // Don't trim to preserve tree structure
+                
             f.render_widget(paragraph, inner_area);
         }
         MainViewType::LlmResponse => {
@@ -248,37 +264,49 @@ fn render_chat_view(f: &mut Frame, app: &App, area: Rect) {
     };
 
     // Prepare chat messages for display
-    let messages: Vec<Line> = app
-        .chat_messages
-        .iter()
-        .map(|msg| {
-            if msg.is_user {
-                Line::from(vec![
-                    Span::styled(
-                        "You: ",
-                        Style::default()
-                            .fg(Color::Yellow)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw(&msg.content),
-                ])
-            } else {
-                Line::from(vec![
-                    Span::styled(
-                        "Assistant: ",
-                        Style::default()
-                            .fg(Color::Green)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw(&msg.content),
-                ])
-            }
-        })
-        .collect();
-
-    let chat_content = Paragraph::new(messages)
+    let mut all_lines: Vec<Line> = Vec::new();
+    
+    for msg in app.chat_messages.iter() {
+        // Add the role label first
+        if msg.is_user {
+            all_lines.push(Line::from(vec![
+                Span::styled(
+                    "You: ",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+        } else {
+            all_lines.push(Line::from(vec![
+                Span::styled(
+                    "Assistant: ",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+        }
+        
+        // Split the content into lines and add each one
+        for content_line in msg.content.lines() {
+            all_lines.push(Line::from(Span::raw(content_line)));
+        }
+        
+        // Add a blank line after each message for spacing
+        all_lines.push(Line::from(""));
+    }
+    
+    // Calculate scroll position to show the most recent messages if they don't all fit
+    let scroll_offset = if all_lines.len() as u16 > inner_area.height {
+        (all_lines.len() as u16).saturating_sub(inner_area.height)
+    } else {
+        0
+    };
+    
+    let chat_content = Paragraph::new(all_lines)
         .wrap(Wrap { trim: true })
-        .scroll((0, 0)); // In a real implementation, this would scroll based on current position
+        .scroll((scroll_offset, 0));
 
     f.render_widget(chat_content, inner_area);
 }

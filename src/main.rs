@@ -34,6 +34,7 @@ use crate::config::McpServerConfig;
 use crate::services::tree_sitter::initialize_service;
 use crate::task::{TaskRegistry, TaskManager};
 use crate::task::tree_sitter_task::TreeSitterTaskHandler;
+use crate::task::shell_task::ShellTaskHandler;
 use crate::ui::app::{App, MainViewType};
 use crate::ui::tui::render_ui;
 
@@ -91,16 +92,25 @@ fn main() -> Result<(), Box<dyn Error>> {
     let tree_sitter_service = initialize_service(&app_config);
     
     // Setup task registry and handlers
-    let task_registry = std::sync::Arc::new(TaskRegistry::new());
+    let mut task_registry = TaskRegistry::new();
     
     // Create filesystem implementation
     let fs_impl = std::sync::Arc::new(fs::operations::LocalFileSystem::new());
     
-    // Create task manager
-    let _task_manager = std::sync::Arc::new(TaskManager::new(fs_impl, task_registry.clone()));
+    // Register task handlers
+    let tree_sitter_handler = std::sync::Arc::new(TreeSitterTaskHandler::new(tree_sitter_service.clone()));
+    let shell_task_handler = std::sync::Arc::new(ShellTaskHandler::new());
     
-    // Register tree-sitter task handler
-    let _tree_sitter_handler = std::sync::Arc::new(TreeSitterTaskHandler::new(tree_sitter_service.clone()));
+    // Add handlers to registry
+    task_registry.register("tree_sitter", tree_sitter_handler);
+    task_registry.register("shell", shell_task_handler);
+    
+    // Create Arc for registry and task manager
+    let task_registry = std::sync::Arc::new(task_registry);
+    let task_manager = std::sync::Arc::new(TaskManager::new(fs_impl, task_registry.clone()));
+    
+    // Set task manager in app
+    app.set_task_manager(task_manager.clone());
 
     // Add welcome message
     app.add_chat_message(
@@ -167,6 +177,7 @@ fn run_tui<B: Backend + crossterm::ExecutableCommand>(terminal: &mut Terminal<B>
 
     loop {
         // Render UI using the centralized render function
+        terminal.clear()?;  // Clear the terminal before redrawing
         terminal.draw(|f| render_ui(f, app))?;
 
         // Wait for event or tick
@@ -184,13 +195,24 @@ fn run_tui<B: Backend + crossterm::ExecutableCommand>(terminal: &mut Terminal<B>
                 // Handle other key events when not processing
                 if !app.is_processing {
                     app.handle_key_event(key);
+                    // Force a redraw after key events
+                    terminal.clear()?;
+                    terminal.draw(|f| render_ui(f, app))?;
                 }
             }
         }
 
         // Check if it's time for a tick
         if last_tick.elapsed() >= tick_rate {
+            let was_processing = app.is_processing;
             app.on_tick();
+            
+            // Force a redraw if processing state changed
+            if was_processing != app.is_processing {
+                terminal.clear()?;
+                terminal.draw(|f| render_ui(f, app))?;
+            }
+            
             last_tick = Instant::now();
         }
 

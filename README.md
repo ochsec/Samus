@@ -74,21 +74,8 @@ You can set up your OpenRouter API key in two ways:
 
 Samus is built with a modular architecture that allows for extensive customization. Check out the `src/ui` directory to modify the interface components.
 
-## Contributing
-
-We welcome contributions to make Samus even better! Feel free to:
-
-1. Fork the repository
-2. Create a feature branch
-3. Implement your changes
-4. Submit a pull request
-
-Please ensure your code follows the project's style and includes appropriate tests.
-
 ## License
 
 Apache 2.0
 
 ---
-
-Made with ❤️ by ochsec and Samus.

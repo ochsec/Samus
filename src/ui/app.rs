@@ -62,6 +62,7 @@ pub struct App {
     // View state
     pub current_main_view: MainViewType,
     pub should_quit: bool,
+    pub displaying_completion: bool, // Whether currently displaying a completion
 
     // Code analysis state
     pub tree_sitter_service: Option<Arc<TreeSitterService>>,
@@ -92,8 +93,9 @@ impl App {
             llm_client: None,
             is_processing: false,
 
-            current_main_view: MainViewType::LlmResponse,
+            current_main_view: MainViewType::ShellOutput,
             should_quit: false,
+            displaying_completion: false,
 
             tree_sitter_service: None,
             current_file_symbols: Vec::new(),
@@ -104,6 +106,16 @@ impl App {
             tick_rate: Duration::from_millis(250),
             last_tick: Instant::now(),
         }
+    }
+    
+    /// Show the input area
+    pub fn show_input_area(&mut self) {
+        self.displaying_completion = false;
+    }
+    
+    /// Hide the input area
+    pub fn hide_input_area(&mut self) {
+        self.displaying_completion = true;
     }
     
     /// Set the task manager
@@ -174,6 +186,10 @@ impl App {
 
         self.add_to_history(input.clone());
         self.add_chat_message(input.clone(), true);
+        
+        // Set current view to ShellOutput and hide input area - this makes output fill the screen
+        self.current_main_view = MainViewType::ShellOutput;
+        self.displaying_completion = true;
 
         // Process command based on prefix
         if input.starts_with('/') {
@@ -228,6 +244,7 @@ impl App {
                 false,
             );
             self.is_processing = false;
+            self.displaying_completion = false;
         }
     }
 
@@ -254,8 +271,12 @@ impl App {
                 }
             }
 
-            // Mark as no longer processing
+            // No need to reset scroll position as we're using terminal scrollback
+            
+            // Mark as no longer processing but keep the completion in full-screen mode
+            // The user can type to automatically exit fullscreen mode
             self.is_processing = false;
+            self.displaying_completion = true;
         }
     }
 
@@ -561,7 +582,30 @@ impl App {
         // This is a safety check to prevent string boundary errors
         self.cursor_position = self.cursor_position.min(self.input_text.len());
         
+        // First, check for custom key bindings from the input handler
+        let command = self.input_handler.handle_key_event(key);
+        if command != InputCommand::None {
+            // Process scrolling commands
+            // We no longer handle scrolling commands
+            return Some(command);
+        }
+        
+        // We're no longer doing custom scroll handling with arrow keys and page up/down
+    // Instead we're relying on the terminal's built-in scrollback buffer
+    // Just handle Escape key to toggle input visibility
+        
         match key {
+            // Handle Escape key to toggle between full-screen output and input mode
+            KeyEvent {
+                code: KeyCode::Esc,
+                modifiers: KeyModifiers::NONE,
+                ..
+            } => {
+                // Toggle between full-screen output and showing the input area
+                self.displaying_completion = !self.displaying_completion;
+                return Some(InputCommand::None);
+            }
+            
             // Quit application with Ctrl+Q
             KeyEvent {
                 code: KeyCode::Char('q'),
@@ -604,6 +648,11 @@ impl App {
                 modifiers: KeyModifiers::NONE,
                 ..
             } => {
+                // If we're in full-screen completion mode, exit it
+                if self.displaying_completion {
+                    self.displaying_completion = false;
+                }
+                
                 if self.cursor_position > 0 {
                     // Ensure we're at a char boundary before removing
                     let new_pos = self.find_prev_char_boundary(self.cursor_position);
@@ -619,6 +668,11 @@ impl App {
                 modifiers: KeyModifiers::NONE,
                 ..
             } => {
+                // If we're in full-screen completion mode, exit it
+                if self.displaying_completion {
+                    self.displaying_completion = false;
+                }
+                
                 if self.cursor_position < self.input_text.len() {
                     self.input_text.remove(self.cursor_position);
                 }
@@ -631,6 +685,11 @@ impl App {
                 modifiers: KeyModifiers::NONE,
                 ..
             } => {
+                // If we're in full-screen completion mode, exit it
+                if self.displaying_completion {
+                    self.displaying_completion = false;
+                }
+                
                 if self.cursor_position > 0 {
                     // Find previous valid char boundary
                     self.cursor_position = self.find_prev_char_boundary(self.cursor_position);
@@ -644,6 +703,11 @@ impl App {
                 modifiers: KeyModifiers::NONE,
                 ..
             } => {
+                // If we're in full-screen completion mode, exit it
+                if self.displaying_completion {
+                    self.displaying_completion = false;
+                }
+                
                 if self.cursor_position < self.input_text.len() {
                     // Find next valid char boundary
                     self.cursor_position = self.find_next_char_boundary(self.cursor_position);
@@ -657,6 +721,11 @@ impl App {
                 modifiers: KeyModifiers::NONE,
                 ..
             } => {
+                // If we're in full-screen completion mode, exit it
+                if self.displaying_completion {
+                    self.displaying_completion = false;
+                }
+                
                 self.navigate_history_up();
                 return Some(InputCommand::None);
             }
@@ -667,6 +736,11 @@ impl App {
                 modifiers: KeyModifiers::NONE,
                 ..
             } => {
+                // If we're in full-screen completion mode, exit it
+                if self.displaying_completion {
+                    self.displaying_completion = false;
+                }
+                
                 self.navigate_history_down();
                 return Some(InputCommand::None);
             }
@@ -677,6 +751,11 @@ impl App {
                 modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
                 ..
             } => {
+                // If we're in full-screen completion mode, exit it when user starts typing
+                if self.displaying_completion {
+                    self.displaying_completion = false;
+                }
+                
                 // Insert at a valid UTF-8 boundary
                 if self.cursor_position <= self.input_text.len() {
                     self.input_text.insert(self.cursor_position, c);
@@ -689,9 +768,9 @@ impl App {
                 return Some(InputCommand::None);
             }
 
-            // Pass other keys to the input handler
+            // Default case - if we get here, no specific handler matched
             _ => {
-                return Some(self.input_handler.handle_key_event(key));
+                return Some(InputCommand::None);
             }
         }
     }
@@ -832,8 +911,12 @@ impl App {
                 }
             }
             
-            // Mark as no longer processing
+            // No need to reset scroll position as we're using terminal scrollback
+            
+            // Mark as no longer processing but keep the completion in full-screen mode
+            // The user can type to automatically exit fullscreen mode
             self.is_processing = false;
+            self.displaying_completion = true;
         }
     }
 

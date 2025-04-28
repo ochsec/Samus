@@ -14,28 +14,19 @@ mod tools;
 mod ui;
 
 use crossterm::{
-    ExecutableCommand,
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    event::{DisableMouseCapture, EnableMouseCapture},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use dotenv::dotenv;
-use ratatui::{
-    Terminal,
-    backend::{Backend, CrosstermBackend},
-};
-use std::error::Error;
-use std::{
-    io::{self, stdout},
-    time::{Duration, Instant},
-};
-use tokio::runtime::Runtime;
+use std::{error::Error, io};
 
 use crate::config::McpServerConfig;
 use crate::services::tree_sitter::initialize_service;
 use crate::task::{TaskRegistry, TaskManager};
 use crate::task::tree_sitter_task::TreeSitterTaskHandler;
 use crate::task::shell_task::ShellTaskHandler;
-use crate::ui::app::{App, MainViewType};
+use crate::ui::app::App;
 use crate::ui::tui::render_ui;
 
 /// Application entry point
@@ -43,47 +34,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Load .env file
     dotenv().ok();
 
-    // Create a tokio runtime
-    let runtime = Runtime::new()?;
+    // We'll create tokio runtimes as needed for async operations
 
-    // Uncomment to run the simple client instead of the TUI
-    // println!("Running simple OpenRouter client instead of TUI...");
-    // runtime.block_on(simple_client::run_simple_client())?;
-
-    // Run the TUI code
-
-    println!("Starting Samus TUI...");
-
-    // Setup terminal
-    match enable_raw_mode() {
-        Ok(_) => {}
-        Err(e) => {
-            println!("Failed to enable raw mode: {}", e);
-            return Err(Box::new(e));
-        }
-    }
-
-    // Setup terminal backend
-    let mut stdout = stdout();
-    stdout.execute(EnterAlternateScreen)?;
-
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = match Terminal::new(backend) {
-        Ok(term) => term,
-        Err(e) => {
-            disable_raw_mode()?;
-            println!("Failed to create terminal: {}", e);
-            return Err(Box::new(e));
-        }
-    };
-
-    // Create app state
-    let mut app = App::new();
-
-    // Initialize VSCode integrations
-    if let Err(e) = runtime.block_on(integrations::Integrations::init()) {
-        println!("Failed to initialize VSCode integrations: {}", e);
-    }
+    println!("Starting Samus with Ratatui interface...");
 
     // Initialize config
     let app_config = config::Config::new();
@@ -109,17 +62,44 @@ fn main() -> Result<(), Box<dyn Error>> {
     let task_registry = std::sync::Arc::new(task_registry);
     let task_manager = std::sync::Arc::new(TaskManager::new(fs_impl, task_registry.clone()));
     
-    // Set task manager in app
+    // Setup terminal with better error handling
+    enable_raw_mode().or_else(|err| {
+        eprintln!("Failed to enable raw mode: {}", err);
+        Err(err)
+    })?;
+    
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen).or_else(|err| {
+        eprintln!("Failed to enter alternate screen: {}", err);
+        let _ = disable_raw_mode(); // Try to clean up
+        Err(err)
+    })?;
+    
+    execute!(stdout, EnableMouseCapture).or_else(|err| {
+        eprintln!("Failed to enable mouse capture: {}", err);
+        let _ = disable_raw_mode(); // Try to clean up
+        let _ = execute!(stdout, LeaveAlternateScreen);
+        Err(err)
+    })?;
+    
+    let backend = ratatui::backend::CrosstermBackend::new(stdout);
+    let mut terminal = ratatui::Terminal::new(backend).or_else(|err| {
+        eprintln!("Failed to create terminal: {}", err);
+        let _ = disable_raw_mode(); // Try to clean up
+        let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
+        Err(err)
+    })?;
+
+    // Create app state
+    let mut app = App::new();
+    
+    // Set task manager
     app.set_task_manager(task_manager.clone());
+    
+    // Initialize TreeSitter with default values
+    app.init_tree_sitter(10_000_000, 5); // 10MB max file size, 5 parsers per language
 
-    // Add welcome message
-    app.add_chat_message(
-        "Welcome to Samus! Type a message or use a slash command like /help to get started."
-            .to_string(),
-        false,
-    );
-
-    // Configure OpenRouter
+    // Configure OpenRouter if API key is available
     if let Ok(api_key) = std::env::var("OPEN_ROUTER_API_KEY") {
         // Create config
         let config = McpServerConfig {
@@ -131,106 +111,61 @@ fn main() -> Result<(), Box<dyn Error>> {
         };
 
         // Initialize client
-        match app.init_llm_client(config) {
-            Ok(_) => app.add_chat_message(
-                "OpenRouter client configured successfully with Claude 3.5 Haiku.".to_string(),
-                false,
-            ),
-            Err(e) => {
-                app.add_chat_message(format!("Error configuring OpenRouter client: {}", e), false)
-            }
+        if let Err(e) = app.init_llm_client(config) {
+            eprintln!("Error configuring OpenRouter client: {}", e);
         }
-    } else {
-        app.add_chat_message("OpenRouter API key not found. Set OPEN_ROUTER_API_KEY in .env or use /config <api_key>.".to_string(), false);
     }
 
-    // Run the app
-    let res = run_tui(&mut terminal, &mut app);
+    // Main event loop
+    let res = run_app(&mut terminal, &mut app);
 
-    // Restore terminal
+    // Restore terminal with better error handling
     if let Err(e) = disable_raw_mode() {
-        println!("Failed to disable raw mode: {}", e);
+        eprintln!("Error disabling raw mode: {}", e);
     }
-
-    // Cleanup terminal
-    terminal.backend_mut().execute(DisableMouseCapture)?;
-    terminal.backend_mut().execute(LeaveAlternateScreen)?;
-    terminal.show_cursor()?;
+    
+    if let Err(e) = execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    ) {
+        eprintln!("Error leaving alternate screen: {}", e);
+    }
+    
+    if let Err(e) = terminal.show_cursor() {
+        eprintln!("Error showing cursor: {}", e);
+    }
 
     if let Err(err) = res {
-        println!("App error: {}", err);
+        println!("{:?}", err);
     }
 
     Ok(())
 }
 
-/// Run the TUI interface
-fn run_tui<B: Backend + crossterm::ExecutableCommand>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<()> {
-    let tick_rate = Duration::from_millis(100);
-    let mut last_tick = Instant::now();
-
-    // Setup mouse capture and initial view
-    terminal.backend_mut().execute(EnableMouseCapture)?;
-
-    // Set initial view
-    app.set_main_view(MainViewType::ShellOutput);
-
+fn run_app<B: ratatui::backend::Backend>(
+    terminal: &mut ratatui::Terminal<B>,
+    app: &mut App,
+) -> io::Result<()> {
     loop {
-        // Render UI using the centralized render function
-        terminal.clear()?;  // Clear the terminal before redrawing
+        // Draw UI
         terminal.draw(|f| render_ui(f, app))?;
 
-        // Wait for event or tick
-        let timeout = tick_rate
-            .checked_sub(last_tick.elapsed())
-            .unwrap_or_else(|| Duration::from_secs(0));
-
-        if event::poll(timeout)? {
-            if let Event::Key(key) = event::read()? {
-                // Check for quit command
-                if key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                    break;
-                }
-
-                // Only handle keys that should work during processing
-                let is_quit_key = key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL);
+        // Handle events
+        if crossterm::event::poll(std::time::Duration::from_millis(100))? {
+            if let crossterm::event::Event::Key(key) = crossterm::event::read()? {
+                // Process key event
+                app.handle_key_event(key);
                 
-                if !app.is_processing || is_quit_key {
-                    let command = app.handle_key_event(key);
-                    
-                    // Ensure we still redraw for important key events
-                    terminal.clear()?;
-                    terminal.draw(|f| render_ui(f, app))?;
-                } else {
-                    // If processing, ignore other keys but don't let them pile up in the buffer
-                    // This prevents keys from causing unexpected behavior when processing finishes
-                    event::read()?;
+                // Check if we should quit
+                if app.should_quit {
+                    return Ok(());
                 }
             }
         }
-
-        // Check if it's time for a tick
-        if last_tick.elapsed() >= tick_rate {
-            let was_processing = app.is_processing;
-            app.on_tick();
-            
-            // Force a redraw if processing state changed
-            if was_processing != app.is_processing {
-                terminal.clear()?;
-                terminal.draw(|f| render_ui(f, app))?;
-            }
-            
-            last_tick = Instant::now();
-        }
-
-        // Check if we should exit
-        if app.should_quit {
-            break;
-        }
+        
+        // Handle periodic updates
+        app.on_tick();
     }
-
-    // Disable mouse support before exit
-    terminal.backend_mut().execute(DisableMouseCapture)?;
-
-    Ok(())
 }
+

@@ -60,6 +60,13 @@ pub enum InputCommand {
     NavigatePreviousResult,
     ToggleSearchCase,
     ToggleSearchRegex,
+    
+    // Scrolling commands
+    MainViewScrollUp,
+    MainViewScrollDown,
+    ChatViewScrollUp,
+    ChatViewScrollDown,
+    ResetChatViewScroll,
 
     // Error and utility commands
     Invalid(String),
@@ -121,7 +128,7 @@ impl InputHandler {
 
         // Diff controls
         self.bind_key(
-            KeyCode::Char('d'),
+            KeyCode::Char('f'),
             KeyModifiers::CONTROL,
             InputCommand::ShowDiff,
         );
@@ -141,6 +148,37 @@ impl InputHandler {
             KeyCode::Char('s'),
             KeyModifiers::CONTROL,
             InputCommand::ToggleSearch,
+        );
+        
+        // Main view scrolling with Ctrl+Up/Down
+        self.bind_key(
+            KeyCode::Up,
+            KeyModifiers::CONTROL,
+            InputCommand::MainViewScrollUp,
+        );
+        self.bind_key(
+            KeyCode::Down,
+            KeyModifiers::CONTROL,
+            InputCommand::MainViewScrollDown,
+        );
+        
+        // Chat view scrolling with simple arrow keys
+        self.bind_key(
+            KeyCode::PageUp,
+            KeyModifiers::NONE,
+            InputCommand::ChatViewScrollUp,
+        );
+        self.bind_key(
+            KeyCode::PageDown,
+            KeyModifiers::NONE,
+            InputCommand::ChatViewScrollDown,
+        );
+        
+        // Reset chat view - using Ctrl+r only as the reliable cross-platform option
+        self.bind_key(
+            KeyCode::Char('r'),
+            KeyModifiers::CONTROL,
+            InputCommand::ResetChatViewScroll,
         );
     }
 
@@ -169,11 +207,11 @@ impl InputHandler {
                 self.current_mode = InputMode::Command;
                 InputCommand::ChangeMode(InputMode::Command)
             }
-            (KeyCode::Up, KeyModifiers::CONTROL) => {
+            (KeyCode::Up, KeyModifiers::ALT) => {
                 self.navigate_history_backward();
                 InputCommand::None
             }
-            (KeyCode::Down, KeyModifiers::CONTROL) => {
+            (KeyCode::Down, KeyModifiers::ALT) => {
                 self.navigate_history_forward();
                 InputCommand::None
             }

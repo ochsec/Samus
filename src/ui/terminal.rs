@@ -218,7 +218,7 @@ impl TerminalViewManager {
     }
 
     pub fn draw(&self, f: &mut Frame) {
-        let chunks = self.get_layout_chunks(f.area());
+        let chunks = self.get_layout_chunks(f.size());
 
         for (i, view) in self.views.iter().enumerate() {
             if i >= chunks.len() {
@@ -331,7 +331,7 @@ impl TerminalViewManager {
 
         // Draw cursor if active
         if is_active {
-            f.set_cursor_position((chunks[1].x + view.cursor_position as u16, chunks[1].y));
+            f.set_cursor(chunks[1].x + view.cursor_position as u16, chunks[1].y);
         }
     }
 }

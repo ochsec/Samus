@@ -1,7 +1,7 @@
 use ratatui::{
     prelude::*,
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph, Wrap, Widget},
 };
 use similar::{ChangeTag, TextDiff};
 use std::fmt;
@@ -120,7 +120,7 @@ impl DiffVisualization {
             .block(Block::default().borders(Borders::ALL).title("Inline Diff"))
             .wrap(Wrap { trim: false });
 
-        paragraph.render(area, buf);
+        Widget::render(paragraph, area, buf);
     }
 
     /// Render side-by-side diff view
@@ -170,8 +170,8 @@ impl DiffVisualization {
         let new_paragraph = Paragraph::new(new_lines)
             .block(Block::default().borders(Borders::ALL).title("Modified"));
 
-        old_paragraph.render(left_area, buf);
-        new_paragraph.render(right_area, buf);
+        Widget::render(old_paragraph, left_area, buf);
+        Widget::render(new_paragraph, right_area, buf);
     }
 
     /// Render unified diff view
@@ -197,7 +197,7 @@ impl DiffVisualization {
             .block(Block::default().borders(Borders::ALL).title("Unified Diff"))
             .wrap(Wrap { trim: false });
 
-        paragraph.render(area, buf);
+        Widget::render(paragraph, area, buf);
     }
 
     /// Navigate diff view

@@ -192,12 +192,19 @@ fn run_tui<B: Backend + crossterm::ExecutableCommand>(terminal: &mut Terminal<B>
                     break;
                 }
 
-                // Handle other key events when not processing
-                if !app.is_processing {
-                    app.handle_key_event(key);
-                    // Force a redraw after key events
+                // Only handle keys that should work during processing
+                let is_quit_key = key.code == KeyCode::Char('q') && key.modifiers.contains(KeyModifiers::CONTROL);
+                
+                if !app.is_processing || is_quit_key {
+                    let command = app.handle_key_event(key);
+                    
+                    // Ensure we still redraw for important key events
                     terminal.clear()?;
                     terminal.draw(|f| render_ui(f, app))?;
+                } else {
+                    // If processing, ignore other keys but don't let them pile up in the buffer
+                    // This prevents keys from causing unexpected behavior when processing finishes
+                    event::read()?;
                 }
             }
         }

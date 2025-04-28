@@ -342,9 +342,21 @@ fn render_input_area(f: &mut Frame, app: &App, area: Rect) {
 
     f.render_widget(input_text, inner_area);
 
-    // Set cursor position
+    // Set cursor position, ensuring it's valid
     // We need to add 1 to account for the block border
-    f.set_cursor_position((inner_area.x + app.cursor_position as u16, inner_area.y));
+    // Make sure cursor_position is within valid text boundaries and convert to screen position
+    let cursor_screen_pos = if app.cursor_position <= app.input_text.len() {
+        // Calculate column by counting displayed characters up to the cursor position
+        // For simplicity, we're assuming each character takes 1 column
+        // For a more accurate implementation, you'd need to consider grapheme clusters
+        let cursor_text = app.input_text.chars().take(app.cursor_position).collect::<String>();
+        inner_area.x + cursor_text.chars().count() as u16
+    } else {
+        // Fallback if cursor is somehow out of bounds
+        inner_area.x
+    };
+    
+    f.set_cursor_position((cursor_screen_pos, inner_area.y));
 }
 
 /// Renders the keyboard shortcut area

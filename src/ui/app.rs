@@ -164,7 +164,10 @@ impl App {
 
     /// Process input text
     pub fn process_input(&mut self) {
+        // Take the input text and ensure the cursor position is reset
         let input = std::mem::take(&mut self.input_text);
+        self.cursor_position = 0; // Reset cursor position
+        
         if input.is_empty() {
             return;
         }
@@ -231,12 +234,13 @@ impl App {
     /// Process LLM response when available
     pub fn check_llm_response(&mut self) {
         if let Some(result) = self.output_manager.check_llm_response() {
-            // Remove the "Thinking..." message
-            if !self.chat_messages.is_empty() {
-                let last_message = self.chat_messages.back().unwrap();
-                if !last_message.is_user && last_message.content == "Thinking..." {
-                    self.chat_messages.pop_back();
-                }
+            // Remove the "Thinking..." message if it exists
+            // Find the last "Thinking..." message from the assistant
+            if let Some(thinking_idx) = self.chat_messages.iter().position(|msg| 
+                !msg.is_user && msg.content == "Thinking..."
+            ) {
+                // Remove it safely
+                self.chat_messages.remove(thinking_idx);
             }
 
             match result {
@@ -553,6 +557,10 @@ impl App {
 
     /// Handle key events
     pub fn handle_key_event(&mut self, key: KeyEvent) -> Option<InputCommand> {
+        // Reset cursor position if it's somehow outside bounds
+        // This is a safety check to prevent string boundary errors
+        self.cursor_position = self.cursor_position.min(self.input_text.len());
+        
         match key {
             // Quit application with Ctrl+Q
             KeyEvent {
@@ -584,6 +592,8 @@ impl App {
                 } else {
                     // Normal Enter submits the input
                     self.process_input();
+                    // Reset cursor after input processing
+                    self.cursor_position = 0;
                     return Some(InputCommand::None);
                 }
             }
@@ -595,8 +605,10 @@ impl App {
                 ..
             } => {
                 if self.cursor_position > 0 {
-                    self.input_text.remove(self.cursor_position - 1);
-                    self.cursor_position -= 1;
+                    // Ensure we're at a char boundary before removing
+                    let new_pos = self.find_prev_char_boundary(self.cursor_position);
+                    self.input_text.remove(new_pos);
+                    self.cursor_position = new_pos;
                 }
                 return Some(InputCommand::None);
             }
@@ -620,7 +632,8 @@ impl App {
                 ..
             } => {
                 if self.cursor_position > 0 {
-                    self.cursor_position -= 1;
+                    // Find previous valid char boundary
+                    self.cursor_position = self.find_prev_char_boundary(self.cursor_position);
                 }
                 return Some(InputCommand::None);
             }
@@ -632,7 +645,8 @@ impl App {
                 ..
             } => {
                 if self.cursor_position < self.input_text.len() {
-                    self.cursor_position += 1;
+                    // Find next valid char boundary
+                    self.cursor_position = self.find_next_char_boundary(self.cursor_position);
                 }
                 return Some(InputCommand::None);
             }
@@ -663,8 +677,15 @@ impl App {
                 modifiers: KeyModifiers::NONE | KeyModifiers::SHIFT,
                 ..
             } => {
-                self.input_text.insert(self.cursor_position, c);
-                self.cursor_position += 1;
+                // Insert at a valid UTF-8 boundary
+                if self.cursor_position <= self.input_text.len() {
+                    self.input_text.insert(self.cursor_position, c);
+                    self.cursor_position += c.len_utf8();
+                } else {
+                    // Safety fallback if cursor is somehow out of bounds
+                    self.input_text.push(c);
+                    self.cursor_position = self.input_text.len();
+                }
                 return Some(InputCommand::None);
             }
 
@@ -673,6 +694,24 @@ impl App {
                 return Some(self.input_handler.handle_key_event(key));
             }
         }
+    }
+    
+    /// Helper method to find the previous valid UTF-8 character boundary
+    fn find_prev_char_boundary(&self, from: usize) -> usize {
+        let mut pos = from.saturating_sub(1);
+        while pos > 0 && !self.input_text.is_char_boundary(pos) {
+            pos -= 1;
+        }
+        pos
+    }
+    
+    /// Helper method to find the next valid UTF-8 character boundary
+    fn find_next_char_boundary(&self, from: usize) -> usize {
+        let mut pos = from + 1;
+        while pos < self.input_text.len() && !self.input_text.is_char_boundary(pos) {
+            pos += 1;
+        }
+        pos.min(self.input_text.len())
     }
 
     /// Navigate command history upward
@@ -689,8 +728,25 @@ impl App {
 
         self.history_index = next_index;
         if let Some(idx) = next_index {
+            // Replace input text safely
             self.input_text = self.command_history[idx].clone();
-            self.cursor_position = self.input_text.len();
+            
+            // Set cursor to the end, ensuring it's at a valid char boundary
+            let text_len = self.input_text.len();
+            self.cursor_position = if text_len > 0 {
+                if self.input_text.is_char_boundary(text_len) {
+                    text_len
+                } else {
+                    // Find the last valid boundary if text_len isn't one
+                    let mut pos = text_len - 1;
+                    while pos > 0 && !self.input_text.is_char_boundary(pos) {
+                        pos -= 1;
+                    }
+                    pos
+                }
+            } else {
+                0
+            };
         }
     }
 
@@ -698,13 +754,31 @@ impl App {
     fn navigate_history_down(&mut self) {
         if let Some(idx) = self.history_index {
             if idx == 0 {
+                // At most recent history item, clear input
                 self.history_index = None;
                 self.input_text.clear();
                 self.cursor_position = 0;
             } else {
+                // Go to more recent history item
                 self.history_index = Some(idx - 1);
                 self.input_text = self.command_history[idx - 1].clone();
-                self.cursor_position = self.input_text.len();
+                
+                // Set cursor to the end, ensuring it's at a valid char boundary
+                let text_len = self.input_text.len();
+                self.cursor_position = if text_len > 0 {
+                    if self.input_text.is_char_boundary(text_len) {
+                        text_len
+                    } else {
+                        // Find the last valid boundary if text_len isn't one
+                        let mut pos = text_len - 1;
+                        while pos > 0 && !self.input_text.is_char_boundary(pos) {
+                            pos -= 1;
+                        }
+                        pos
+                    }
+                } else {
+                    0
+                };
             }
         }
     }
@@ -723,6 +797,18 @@ impl App {
     /// Check for shell command results
     fn check_shell_result(&mut self) {
         if let Some(result) = self.output_manager.check_shell_result() {
+            // Find and remove any "Executing..." or similar pending message
+            // This follows the same pattern as check_llm_response for consistency
+            if let Some(pending_idx) = self.chat_messages.iter().position(|msg| 
+                !msg.is_user && (msg.content.starts_with("Executing bash command:") || 
+                                msg.content.starts_with("Listing"))
+            ) {
+                // Only remove if it's the most recent message from the assistant
+                if self.chat_messages.iter().skip(pending_idx + 1).all(|msg| msg.is_user) {
+                    self.chat_messages.remove(pending_idx);
+                }
+            }
+
             match result {
                 Ok(task_result) => {
                     // Convert task result to string based on its type

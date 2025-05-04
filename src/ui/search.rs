@@ -346,17 +346,17 @@ impl SearchManager {
 
     /// Navigate to next match in current search result
     pub async fn next_match(&self) {
-        if let Some(mut result) = self.current_result.write().await.take() {
+        let mut write_guard = self.current_result.write().await;
+        if let Some(result) = write_guard.as_mut() {
             result.next_match();
-            *self.current_result.write().await = Some(result);
         }
     }
 
     /// Navigate to previous match in current search result
     pub async fn previous_match(&self) {
-        if let Some(mut result) = self.current_result.write().await.take() {
+        let mut write_guard = self.current_result.write().await;
+        if let Some(result) = write_guard.as_mut() {
             result.previous_match();
-            *self.current_result.write().await = Some(result);
         }
     }
 

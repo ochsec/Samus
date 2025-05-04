@@ -1,4 +1,5 @@
 use crate::task::Task;
+use serde_json::Value;
 use crate::ui::task_types::TaskOutput;
 use ratatui::{
     Frame,
@@ -174,8 +175,8 @@ mod tests {
         let mut view = TaskView::new();
 
         // Add some test tasks
-        view.add_task(Task::new("task1", "Task 1"));
-        view.add_task(Task::new("task2", "Task 2"));
+        view.add_task(Task::new("task1", Value::String("Task 1".to_string())));
+        view.add_task(Task::new("task2", Value::String("Task 2".to_string())));
 
         // Test selection
         view.select_next();

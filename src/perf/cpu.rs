@@ -18,8 +18,7 @@ pub enum Priority {
 pub struct Task {
     id: String,
     priority: Priority,
-    work:
-        Box<dyn FnOnce() -> Result<(), Box<dyn std::error::Error + Send + Sync>> + Send + 'static>,
+    work: Box<dyn FnOnce() -> Result<(), Box<dyn std::error::Error + Send + Sync>> + Send + Sync + 'static>,
 }
 
 // Task scheduler for CPU optimization
@@ -110,12 +109,16 @@ impl TaskScheduler {
 }
 
 // Lazy loading implementation
+struct LazyState<T, F> {
+    value: Option<T>,
+    init: Option<F>,
+}
+
 pub struct LazyLoader<T, F>
 where
     F: FnOnce() -> T,
 {
-    value: RwLock<Option<T>>,
-    init: Option<F>,
+    state: RwLock<LazyState<T, F>>,
 }
 
 impl<T, F> LazyLoader<T, F>
@@ -124,35 +127,39 @@ where
 {
     pub fn new(init: F) -> Self {
         Self {
-            value: RwLock::new(None),
-            init: Some(init),
+            state: RwLock::new(LazyState {
+                value: None,
+                init: Some(init),
+            }),
         }
     }
 
-    pub fn get(&mut self) -> &T {
-        // Initialize the value if it hasn't been initialized yet
-        if self.value.read().is_none() {
-            // Check if we need to initialize
-            let should_init = self.value.read().is_none() && self.init.is_some();
-
-            // If we need to initialize, take the initializer function
-            let init_fn = if should_init { self.init.take() } else { None };
-
-            // Call the initializer if we took it
-            if let Some(initializer) = init_fn {
-                let result = initializer();
-                *self.value.write() = Some(result);
+    pub fn get(&self) -> &T {
+        // Try read-only access first
+        {
+            let state = self.state.read();
+            if let Some(value) = &state.value {
+                return unsafe {
+                    // SAFETY: Value exists and won't be modified while we hold the read lock
+                    let ptr = value as *const T;
+                    &*ptr
+                };
             }
         }
 
-        // The value exists now, get a read guard and return a reference
-        let guard = self.value.read();
-        let value_ref = guard.as_ref().unwrap();
+        // Need to initialize - acquire write lock
+        let mut state = self.state.write();
+        
+        // Check again in case another thread initialized while we were waiting
+        if state.value.is_none() {
+            if let Some(init) = state.init.take() {
+                state.value = Some(init());
+            }
+        }
 
-        // SAFETY: We're extending the lifetime of the reference beyond the guard
-        // This is safe as long as self outlives the returned reference
         unsafe {
-            let ptr = value_ref as *const T;
+            // SAFETY: Value is now initialized and won't be modified while we hold the lock
+            let ptr = state.value.as_ref().unwrap() as *const T;
             &*ptr
         }
     }
@@ -172,7 +179,7 @@ impl BackgroundTaskManager {
 
     pub fn spawn<F>(&self, priority: Priority, work: F)
     where
-        F: FnOnce() -> Result<(), Box<dyn std::error::Error + Send + Sync>> + Send + 'static,
+        F: FnOnce() -> Result<(), Box<dyn std::error::Error + Send + Sync>> + Send + Sync + 'static,
     {
         self.scheduler.schedule(Task {
             id: uuid::Uuid::new_v4().to_string(),
@@ -205,9 +212,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_task_scheduler() {
-        let scheduler = TaskScheduler::new(2);
+        let scheduler = Arc::new(TaskScheduler::new(2));
         let counter = Arc::new(AtomicUsize::new(0));
 
+        // Spawn the scheduler in a separate task
+        let scheduler_clone = Arc::clone(&scheduler);
+        let scheduler_handle = tokio::spawn(async move {
+            scheduler_clone.run().await;
+        });
+
+        // Schedule some test tasks
         for i in 0..5 {
             let counter = Arc::clone(&counter);
             scheduler.schedule(Task {
@@ -220,12 +234,14 @@ mod tests {
             });
         }
 
-        tokio::spawn(async move {
-            scheduler.run().await;
-        });
-
+        // Wait a bit for tasks to process
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        
+        // Verify tasks were processed
         assert!(counter.load(Ordering::SeqCst) > 0);
+        
+        // Clean up
+        scheduler_handle.abort();
     }
 
     #[test]
@@ -238,8 +254,15 @@ mod tests {
             42
         });
 
-        assert_eq!(*lazy.get(), 42);
-        assert_eq!(*lazy.get(), 42);
+        // First access should initialize
+        let val1 = lazy.get();
+        assert_eq!(*val1, 42);
+        
+        // Second access should use cached value
+        let val2 = lazy.get();
+        assert_eq!(*val2, 42);
+        
+        // Verify initialization only happened once
         assert_eq!(counter.load(Ordering::SeqCst), 1);
     }
 }

@@ -14,13 +14,13 @@ impl FrameLimiter {
         Self {
             target_fps,
             frame_duration: Duration::from_secs(1) / target_fps,
-            last_frame: RwLock::new(Instant::now()),
+            last_frame: RwLock::new(Instant::now() - Duration::from_secs(1)), // Initialize to force first frame
         }
     }
 
     pub fn should_render(&self) -> bool {
-        let mut last_frame = self.last_frame.write();
         let now = Instant::now();
+        let mut last_frame = self.last_frame.write();
         let elapsed = now.duration_since(*last_frame);
 
         if elapsed >= self.frame_duration {
@@ -144,11 +144,24 @@ mod tests {
 
     #[test]
     fn test_frame_limiter() {
-        let limiter = FrameLimiter::new(60);
-        assert!(limiter.should_render()); // First frame always renders
-        assert!(!limiter.should_render()); // Too soon for next frame
-        thread::sleep(Duration::from_millis(17)); // Wait for next frame
-        assert!(limiter.should_render());
+        let limiter = FrameLimiter::new(30); // Use lower FPS for more reliable timing
+        
+        // First frame should always render because we initialized last_frame in the past
+        assert!(limiter.should_render(), "First frame should render");
+        
+        // Second frame should not render immediately
+        assert!(!limiter.should_render(), "Frame should not render before interval");
+        
+        // Wait for frame duration (33.33ms at 30 FPS) plus a small buffer
+        thread::sleep(Duration::from_millis(40));
+        assert!(limiter.should_render(), "Frame should render after interval");
+        
+        // Immediate frame after should not render
+        assert!(!limiter.should_render(), "Frame should not render immediately after previous frame");
+        
+        // Wait again and verify we can render
+        thread::sleep(Duration::from_millis(40));
+        assert!(limiter.should_render(), "Frame should render after second interval");
     }
 
     #[test]
